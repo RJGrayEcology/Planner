@@ -139,13 +139,14 @@ const DEFAULT_STATE = {
     { title: 'One-income family pressure', severity: 'High', note: 'A child arrival increases the value of liquidity and predictable cashflow.' },
     { title: 'Opportunity dilution', severity: 'Medium', note: 'Too many broad ideas reduce execution quality. Keep expertise-first filters.' },
   ],
-  signals: { weather: null, hazards: [], tech: [], lastUpdated: null },
+  signals: { weather: null, hazards: [], tech: [], jobs: [], lastUpdated: null },
   connectors: [
     { name: 'Open-Meteo weather', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
     { name: 'NASA EONET hazards', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
     { name: 'Hacker News API', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
-    { name: 'ReliefWeb jobs', type: 'RSS/API', status: 'mock', note: 'Priority role source placeholder.' },
-    { name: 'INTERPOL vacancies', type: 'Page watch', status: 'mock', note: 'Static-site tracking target; backend needed for full automation.' },
+    { name: 'ReliefWeb jobs API', type: 'API', status: 'live', note: 'Live humanitarian and consultancy opportunities.' },
+    { name: 'Arbeitnow jobs API', type: 'API', status: 'live', note: 'Live remote/international role stream.' },
+    { name: 'RemoteOK jobs API', type: 'API', status: 'live', note: 'Live remote opportunity stream for analyst/consultancy-adjacent roles.' },
   ],
   meta: { lastEngine: null, lastSavedAt: null },
 };
@@ -500,15 +501,17 @@ function renderLocation(engine) {
 
 function renderCareer() {
   renderStack(E.careerLanes, state.careerLanes, (item) => noteCard({ title: item.title, detail: `${item.action} Payoff: ${item.payoff}.` }, `Fit ${item.fit}`));
+  if (!state.signals.jobs.length) {
+    E.jobWatchlist.innerHTML = '<p class="empty-state">Live jobs will auto-refresh daily. Use “Load live signals” for an immediate refresh.</p>';
+    return;
+  }
 
-  const watchlist = [
-    { title: 'INTERPOL vacancies', detail: 'Official global enforcement openings.', url: 'https://www.interpol.int/What-you-can-do/Careers/Vacancies' },
-    { title: 'ReliefWeb jobs', detail: 'International jobs + consultancies feed.', url: 'https://reliefweb.int/jobs' },
-    { title: 'EU Careers / Europol', detail: 'Brussels and EU institutional pathways.', url: 'https://eu-careers.europa.eu/' },
-    { title: 'UN Careers', detail: 'UNEP, UNODC, policy and analysis roles.', url: 'https://careers.un.org/' },
-  ];
-
-  E.jobWatchlist.innerHTML = watchlist.map((item) => `<article class="note-card"><h4><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a></h4><p>${item.detail}</p></article>`).join('');
+  E.jobWatchlist.innerHTML = state.signals.jobs.slice(0, 8).map((item) => `
+    <article class="note-card">
+      <h4><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a></h4>
+      <p>${item.detail}</p>
+    </article>
+  `).join('');
 }
 
 function renderFamily(engine, briefing) {
@@ -696,10 +699,47 @@ async function loadLiveSignals() {
         return stories.filter(Boolean).map((story) => ({ title: story.title, detail: `Score ${story.score || 0} | ${story.by || 'unknown'} | ${story.url || 'news.ycombinator.com'}` }));
       });
 
-    const [weatherResult, hazardResult, techResult] = await Promise.allSettled([weatherPromise, hazardPromise, techPromise]);
+    const reliefWebPromise = fetch('https://api.reliefweb.int/v1/jobs?appname=strategic-life-dashboard&limit=8&sort[]=date:desc')
+      .then((res) => { if (!res.ok) throw new Error('ReliefWeb request failed'); return res.json(); })
+      .then((data) => (data.data || []).map((item) => ({
+        title: item.fields?.title || 'ReliefWeb opportunity',
+        detail: `ReliefWeb | ${item.fields?.country?.[0]?.name || 'Global'} | ${item.fields?.career_categories?.[0]?.name || 'Professional'}`,
+        url: item.fields?.url || 'https://reliefweb.int/jobs',
+      })));
+
+    const arbeitnowPromise = fetch('https://www.arbeitnow.com/api/job-board-api')
+      .then((res) => { if (!res.ok) throw new Error('Arbeitnow request failed'); return res.json(); })
+      .then((data) => (data.data || []).slice(0, 8).map((item) => ({
+        title: item.title || 'Arbeitnow opportunity',
+        detail: `Arbeitnow | ${item.company_name || 'Company'} | ${item.location || 'Remote'}`,
+        url: item.url || 'https://www.arbeitnow.com/jobs',
+      })));
+
+    const remoteOkPromise = fetch('https://remoteok.com/api')
+      .then((res) => { if (!res.ok) throw new Error('RemoteOK request failed'); return res.json(); })
+      .then((data) => (Array.isArray(data) ? data.slice(1, 9) : []).map((item) => ({
+        title: item.position || 'RemoteOK opportunity',
+        detail: `RemoteOK | ${item.company || 'Company'} | ${item.location || 'Remote'}`,
+        url: item.url ? `https://remoteok.com${item.url}` : 'https://remoteok.com/',
+      })));
+
+    const [weatherResult, hazardResult, techResult, reliefWebResult, arbeitnowResult, remoteOkResult] = await Promise.allSettled([
+      weatherPromise,
+      hazardPromise,
+      techPromise,
+      reliefWebPromise,
+      arbeitnowPromise,
+      remoteOkPromise,
+    ]);
     if (weatherResult.status === 'fulfilled') state.signals.weather = weatherResult.value;
     if (hazardResult.status === 'fulfilled') state.signals.hazards = hazardResult.value;
     if (techResult.status === 'fulfilled') state.signals.tech = techResult.value;
+    const liveJobs = [
+      ...(reliefWebResult.status === 'fulfilled' ? reliefWebResult.value : []),
+      ...(arbeitnowResult.status === 'fulfilled' ? arbeitnowResult.value : []),
+      ...(remoteOkResult.status === 'fulfilled' ? remoteOkResult.value : []),
+    ];
+    state.signals.jobs = liveJobs.slice(0, 14);
 
     state.signals.lastUpdated = new Date().toISOString();
     saveState();
@@ -711,6 +751,19 @@ async function loadLiveSignals() {
     E.loadLiveSignals.textContent = original;
     E.loadLiveSignals.disabled = false;
   }
+}
+
+function needsDailyRefresh(lastUpdated) {
+  if (!lastUpdated) return true;
+  const ageMs = Date.now() - new Date(lastUpdated).getTime();
+  return ageMs >= 24 * 60 * 60 * 1000;
+}
+
+function setupDailyAutomation() {
+  if (needsDailyRefresh(state.signals.lastUpdated)) loadLiveSignals();
+  setInterval(() => {
+    if (needsDailyRefresh(state.signals.lastUpdated)) loadLiveSignals();
+  }, 60 * 60 * 1000);
 }
 
 function cacheElements() {
@@ -787,6 +840,7 @@ function init() {
   setupNavigation();
   setupForms();
   setupActions();
+  setupDailyAutomation();
   renderAll();
 }
 

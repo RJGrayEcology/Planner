@@ -25,6 +25,10 @@ A static GitHub Pages friendly prototype built with plain HTML, CSS, and JavaScr
   - Open-Meteo weather
   - NASA EONET natural events
   - Hacker News top stories
+  - ReliefWeb jobs API
+  - Arbeitnow jobs API
+  - RemoteOK jobs API
+- Live feeds auto-refresh daily (and can be manually refreshed immediately).
 
 ## Deploy to GitHub Pages
 
