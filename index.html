@@ -1,1 +1,408 @@
-testing
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Strategic Life Intelligence Dashboard</title>
+  <meta name="description" content="Private strategic life dashboard for wealth, family security, location strategy, and career opportunity planning." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-mark">SL</div>
+        <div>
+          <p class="eyebrow">Private dashboard</p>
+          <h1>Strategic Life Intelligence</h1>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Primary">
+        <button class="nav-btn active" data-section="command-center">Command Center</button>
+        <button class="nav-btn" data-section="life-horizons">Life Horizons</button>
+        <button class="nav-btn" data-section="wealth-engine">Wealth Engine</button>
+        <button class="nav-btn" data-section="location-radar">Location Radar</button>
+        <button class="nav-btn" data-section="career-watch">Career Watch</button>
+        <button class="nav-btn" data-section="family-readiness">Family Readiness</button>
+        <button class="nav-btn" data-section="signals">Signals</button>
+        <button class="nav-btn" data-section="settings">Settings</button>
+      </nav>
+
+      <div class="sidebar-footer card subtle-card">
+        <p class="eyebrow">Engine mode</p>
+        <div class="mode-row">
+          <span class="mode-pill">Balanced</span>
+          <span id="date-stamp"></span>
+        </div>
+        <p class="muted small">Designed for one primary income, spouse remote optionality, family planning, and long-horizon wealth building.</p>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Daily briefing</p>
+          <h2 id="section-title">Command Center</h2>
+        </div>
+        <div class="topbar-actions">
+          <button id="refresh-briefing" class="btn btn-secondary">Refresh briefing</button>
+          <button id="load-live-signals" class="btn btn-primary">Load live signals</button>
+          <button id="export-state" class="btn btn-secondary">Export JSON</button>
+        </div>
+      </header>
+
+      <section id="command-center" class="section visible">
+        <div class="hero-grid">
+          <div class="hero-card card gradient-card">
+            <div class="hero-header">
+              <div>
+                <p class="eyebrow">Primary directive</p>
+                <h3 id="primary-directive-title">Build high wealth without breaking family stability.</h3>
+              </div>
+              <div class="score-ring" id="composite-score-ring">
+                <span id="composite-score">0</span>
+              </div>
+            </div>
+            <p id="primary-directive-text" class="hero-text"></p>
+            <div class="hero-tags" id="directive-tags"></div>
+          </div>
+
+          <div class="hero-side-grid">
+            <div class="card metric-card">
+              <p class="eyebrow">12-month wealth score</p>
+              <p class="metric-value" id="wealth-score">0</p>
+              <p class="muted">Tracks savings pace, investable surplus, and diversification progress.</p>
+            </div>
+            <div class="card metric-card">
+              <p class="eyebrow">Household resilience</p>
+              <p class="metric-value" id="resilience-score">0</p>
+              <p class="muted">Emergency runway, one-income pressure, child planning buffer.</p>
+            </div>
+            <div class="card metric-card">
+              <p class="eyebrow">Location viability</p>
+              <p class="metric-value" id="location-score">0</p>
+              <p class="muted">Safety, affordability, family comfort, and long-term livability.</p>
+            </div>
+            <div class="card metric-card">
+              <p class="eyebrow">Career leverage</p>
+              <p class="metric-value" id="career-score">0</p>
+              <p class="muted">Fit between your expertise and monetizable roles or offerings.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid two-col mt-lg">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Today</p>
+                <h3>Top 3 actions</h3>
+              </div>
+            </div>
+            <div id="today-actions" class="stack"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Week signal</p>
+                <h3>Why now</h3>
+              </div>
+            </div>
+            <div id="why-now" class="stack compact"></div>
+          </div>
+        </div>
+
+        <div class="grid three-col mt-lg">
+          <div class="card">
+            <div class="card-header"><h3>Current threats</h3></div>
+            <div id="threat-list" class="stack compact"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Best opportunity lanes</h3></div>
+            <div id="opportunity-lanes" class="stack compact"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Strategic checkpoints</h3></div>
+            <div id="checkpoint-list" class="stack compact"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="life-horizons" class="section">
+        <div class="grid two-col">
+          <div class="card timeline-card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Execution ladder</p>
+                <h3>Horizon plan</h3>
+              </div>
+            </div>
+            <div id="horizon-timeline" class="timeline"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Interpretation</p>
+                <h3>Strategy narrative</h3>
+              </div>
+            </div>
+            <div id="strategy-narrative" class="stack"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="wealth-engine" class="section">
+        <div class="grid three-col">
+          <div class="card metric-card tall">
+            <p class="eyebrow">Monthly investable surplus</p>
+            <p class="metric-value" id="monthly-surplus">€0</p>
+            <div class="meter"><span id="surplus-meter"></span></div>
+            <p class="muted">Income minus essentials, strategic spending, and conservative family buffer.</p>
+          </div>
+          <div class="card metric-card tall">
+            <p class="eyebrow">5-year house fund path</p>
+            <p class="metric-value" id="house-fund-projection">€0</p>
+            <div class="meter"><span id="house-meter"></span></div>
+            <p class="muted">Projected liquid capital available for a home goal in five years.</p>
+          </div>
+          <div class="card metric-card tall">
+            <p class="eyebrow">10-year investable assets</p>
+            <p class="metric-value" id="ten-year-assets">€0</p>
+            <div class="meter"><span id="asset-meter"></span></div>
+            <p class="muted">Simple-growth projection with editable assumptions and disciplined contributions.</p>
+          </div>
+        </div>
+
+        <div class="grid two-col mt-lg">
+          <div class="card">
+            <div class="card-header"><h3>Capital allocation</h3></div>
+            <div id="capital-allocation" class="allocation-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Wealth recommendations</h3></div>
+            <div id="wealth-recommendations" class="stack"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="location-radar" class="section">
+        <div class="grid two-col">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Priority geographies</p>
+                <h3>Country comparison</h3>
+              </div>
+            </div>
+            <div id="country-comparison" class="country-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Recommendation</p>
+                <h3>Best fit now</h3>
+              </div>
+            </div>
+            <div id="location-recommendation" class="stack"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="career-watch" class="section">
+        <div class="grid two-col">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">High-fit lanes</p>
+                <h3>Career and consultancy watch</h3>
+              </div>
+            </div>
+            <div id="career-lanes" class="stack"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Official watch sources</p>
+                <h3>Targets to monitor</h3>
+              </div>
+            </div>
+            <div id="job-watchlist" class="stack compact"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="family-readiness" class="section">
+        <div class="grid three-col">
+          <div class="card metric-card tall">
+            <p class="eyebrow">Emergency runway</p>
+            <p class="metric-value" id="runway-months">0 mo</p>
+            <p class="muted">Months covered if the household temporarily relies on one main income stream.</p>
+          </div>
+          <div class="card metric-card tall">
+            <p class="eyebrow">Spouse remote income potential</p>
+            <p class="metric-value" id="spouse-potential">0</p>
+            <p class="muted">Writing, education, and primatology-linked research pathways.</p>
+          </div>
+          <div class="card metric-card tall">
+            <p class="eyebrow">Family comfort score</p>
+            <p class="metric-value" id="family-score">0</p>
+            <p class="muted">Blends safety, housing pressure, healthcare, and bandwidth realism.</p>
+          </div>
+        </div>
+
+        <div class="grid two-col mt-lg">
+          <div class="card">
+            <div class="card-header"><h3>Remote income paths for spouse</h3></div>
+            <div id="spouse-income-paths" class="stack"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Family preparation recommendations</h3></div>
+            <div id="family-recommendations" class="stack"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="signals" class="section">
+        <div class="grid three-col">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Live source</p>
+                <h3>Weather pulse</h3>
+              </div>
+            </div>
+            <div id="weather-signal" class="stack compact"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Live source</p>
+                <h3>Natural hazard feed</h3>
+              </div>
+            </div>
+            <div id="hazard-signal" class="stack compact"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Live source</p>
+                <h3>Tech opportunity chatter</h3>
+              </div>
+            </div>
+            <div id="tech-signal" class="stack compact"></div>
+          </div>
+        </div>
+
+        <div class="card mt-lg">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">Connector map</p>
+              <h3>Live connector readiness</h3>
+            </div>
+          </div>
+          <div id="connector-status" class="connector-grid"></div>
+        </div>
+      </section>
+
+      <section id="settings" class="section">
+        <div class="grid two-col">
+          <div class="card">
+            <div class="card-header"><h3>Profile and finance</h3></div>
+            <form id="settings-form" class="form-grid">
+              <label>
+                Net monthly income (€)
+                <input type="number" step="50" name="netIncome" />
+              </label>
+              <label>
+                Cash savings (€)
+                <input type="number" step="100" name="cashSavings" />
+              </label>
+              <label>
+                Long-term investments (€)
+                <input type="number" step="100" name="investments" />
+              </label>
+              <label>
+                Monthly essential costs (€)
+                <input type="number" step="50" name="essentialCosts" />
+              </label>
+              <label>
+                Monthly strategic spending (€)
+                <input type="number" step="50" name="strategicSpending" />
+              </label>
+              <label>
+                Weekly work hours
+                <input type="number" step="1" name="weeklyHours" />
+              </label>
+              <label>
+                Home goal horizon (years)
+                <input type="number" step="1" name="homeGoalYears" />
+              </label>
+              <label>
+                Target house fund (€)
+                <input type="number" step="1000" name="targetHouseFund" />
+              </label>
+              <label>
+                Weekend burnout (0-100)
+                <input type="number" step="1" min="0" max="100" name="weekendBurnout" />
+              </label>
+              <label>
+                Expected annual return (%)
+                <input type="number" step="0.5" name="expectedReturnPct" />
+              </label>
+              <label>
+                Spouse remote income target (€ / month)
+                <input type="number" step="50" name="spouseIncomeTarget" />
+              </label>
+              <label>
+                Side income target (€ / month)
+                <input type="number" step="50" name="sideIncomeTarget" />
+              </label>
+              <div class="form-actions full-width">
+                <button class="btn btn-primary" type="submit">Save settings</button>
+                <button class="btn btn-secondary" type="button" id="reset-defaults">Reset defaults</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3>Weighting controls</h3></div>
+            <div id="weight-controls" class="weight-stack"></div>
+            <div class="card-header mt-lg"><h3>Import state</h3></div>
+            <label class="file-label">
+              Upload exported dashboard JSON
+              <input type="file" id="import-state" accept="application/json" />
+            </label>
+            <p class="muted small">All data is stored locally in your browser for this static prototype.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <template id="recommendation-template">
+    <article class="recommendation-card">
+      <div class="rec-top">
+        <div>
+          <p class="rec-title"></p>
+          <p class="rec-meta"></p>
+        </div>
+        <span class="confidence-pill"></span>
+      </div>
+      <p class="rec-description"></p>
+      <div class="rec-footer">
+        <span class="rec-payoff"></span>
+        <span class="rec-risk"></span>
+        <span class="rec-time"></span>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
