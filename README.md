@@ -1,24 +1,30 @@
 # Strategic Life Intelligence Dashboard
 
-A static GitHub Pages friendly prototype built as plain HTML, CSS, and JavaScript.
+A static GitHub Pages friendly prototype built with plain HTML, CSS, and JavaScript.
 
 ## What it does
 
-- Gives a private command-center style dashboard for life planning
-- Uses editable local settings for income, savings, family planning, and risk weighting
-- Generates horizon-based recommendations for:
-  - today
-  - this week
-  - this month
-  - this year
-  - 5 years
-  - 10 years
-- Includes seeded country comparison and family-readiness logic
+- Runs as a private command-center dashboard for long-horizon life strategy.
+- Uses editable local settings for income, savings, family planning, and weighted priorities.
+- Produces recommendations across day/week/month/year/5-year/10-year horizons.
+- Includes stronger scoring for:
+  - wealth compounding
+  - household resilience
+  - family readiness
+  - career leverage
+  - weekend protection
+- Includes a richer location model anchored on Belgium, France, US + 2 optional comparison countries.
+- Includes dedicated modules for:
+  - Family Readiness
+  - Career / Consultancy Watch
+  - Opportunity Radar
+  - Location & Stability comparison
+- Shows "what changed" and "why now" logic in the command center.
+- Stores state locally with import/export JSON support and save timestamp visibility.
 - Includes live client-side signal loading for:
   - Open-Meteo weather
   - NASA EONET natural events
   - Hacker News top stories
-- Stores all user state locally in the browser
 
 ## Deploy to GitHub Pages
 
@@ -35,14 +41,6 @@ If you want to keep site files in `/docs`, move `index.html`, `styles.css`, and 
 
 ## Notes
 
-- This is intentionally a static prototype so it works on GitHub Pages.
-- For real protected APIs, RSS normalization, job page watchers, or alert automation, a backend later would be better.
-- Current country scores and many opportunity scores are seeded planning assumptions, not authoritative real-time facts.
-
-## Suggested next upgrades
-
-1. Add real job/RSS connectors through a small serverless backend.
-2. Add editable city-level housing comparisons.
-3. Add a weekly memo generator.
-4. Add manual notes and evidence drawers per recommendation.
-5. Add scenario presets such as `house-first`, `career-jump`, and `max-safety`.
+- This remains intentionally static for GitHub Pages compatibility.
+- For protected APIs, alerting automation, RSS normalization, and robust page-watchers, a future backend/serverless layer is recommended.
+- Country and opportunity values are seeded planning assumptions, meant for structured thinking rather than authoritative external truth.

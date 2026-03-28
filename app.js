@@ -1,4 +1,103 @@
-const STORAGE_KEY = 'strategic-life-dashboard-state-v1';
+const STORAGE_KEY = 'strategic-life-dashboard-state-v2';
+
+const COUNTRY_LIBRARY = {
+  belgium: {
+    id: 'belgium',
+    name: 'Belgium',
+    type: 'priority',
+    safety: 81,
+    affordability: 61,
+    familyComfort: 79,
+    wealthUpside: 59,
+    childcareSupport: 76,
+    remoteCareerFit: 67,
+    notes: 'Strong stability baseline, family-friendly social services, manageable but rising housing pressure in major cities.',
+  },
+  france: {
+    id: 'france',
+    name: 'France',
+    type: 'priority',
+    safety: 74,
+    affordability: 63,
+    familyComfort: 77,
+    wealthUpside: 58,
+    childcareSupport: 74,
+    remoteCareerFit: 64,
+    notes: 'Broad quality-of-life range and family lifestyle options. Compensation acceleration depends on specialization and region.',
+  },
+  'united-states': {
+    id: 'united-states',
+    name: 'United States',
+    type: 'priority',
+    safety: 62,
+    affordability: 48,
+    familyComfort: 59,
+    wealthUpside: 86,
+    childcareSupport: 42,
+    remoteCareerFit: 88,
+    notes: 'Highest raw earning upside, but higher healthcare/family cost volatility and lower baseline safety consistency.',
+  },
+  netherlands: {
+    id: 'netherlands',
+    name: 'Netherlands',
+    type: 'comparison',
+    safety: 83,
+    affordability: 45,
+    familyComfort: 81,
+    wealthUpside: 67,
+    childcareSupport: 73,
+    remoteCareerFit: 71,
+    notes: 'Very strong stability and family comfort profile, with heavy housing competition in key areas.',
+  },
+  canada: {
+    id: 'canada',
+    name: 'Canada',
+    type: 'comparison',
+    safety: 82,
+    affordability: 42,
+    familyComfort: 77,
+    wealthUpside: 64,
+    childcareSupport: 71,
+    remoteCareerFit: 69,
+    notes: 'High-quality family environment with affordability pressure in top metros.',
+  },
+  germany: {
+    id: 'germany',
+    name: 'Germany',
+    type: 'comparison',
+    safety: 79,
+    affordability: 58,
+    familyComfort: 75,
+    wealthUpside: 66,
+    childcareSupport: 74,
+    remoteCareerFit: 72,
+    notes: 'Strong economic base and childcare infrastructure with mixed tax and language trade-offs.',
+  },
+  portugal: {
+    id: 'portugal',
+    name: 'Portugal',
+    type: 'comparison',
+    safety: 84,
+    affordability: 70,
+    familyComfort: 82,
+    wealthUpside: 49,
+    childcareSupport: 68,
+    remoteCareerFit: 62,
+    notes: 'Excellent lifestyle and affordability for family setup, with lower local salary upside.',
+  },
+  switzerland: {
+    id: 'switzerland',
+    name: 'Switzerland',
+    type: 'comparison',
+    safety: 90,
+    affordability: 35,
+    familyComfort: 80,
+    wealthUpside: 84,
+    childcareSupport: 66,
+    remoteCareerFit: 74,
+    notes: 'Outstanding safety and earnings potential with very high cost of living and housing barriers.',
+  },
+};
 
 const DEFAULT_STATE = {
   profile: {
@@ -15,251 +114,90 @@ const DEFAULT_STATE = {
     spouseIncomeTarget: 500,
     sideIncomeTarget: 1200,
   },
-  weights: {
-    wealth: 35,
-    safety: 30,
-    housing: 20,
-    career: 10,
-    energy: 5,
-  },
-  countries: [
-    {
-      id: 'belgium',
-      name: 'Belgium',
-      type: 'priority',
-      safety: 81,
-      affordability: 61,
-      familyComfort: 79,
-      wealthUpside: 59,
-      notes: 'Strong stability baseline, decent family comfort, housing burden is manageable but not cheap in top areas.',
-    },
-    {
-      id: 'france',
-      name: 'France',
-      type: 'priority',
-      safety: 74,
-      affordability: 63,
-      familyComfort: 77,
-      wealthUpside: 58,
-      notes: 'Good lifestyle and broad regional choice, but income acceleration may depend on niche consulting or remote work leverage.',
-    },
-    {
-      id: 'united-states',
-      name: 'United States',
-      type: 'priority',
-      safety: 62,
-      affordability: 48,
-      familyComfort: 59,
-      wealthUpside: 86,
-      notes: 'Best raw upside for wealth and high salaries, but more volatility in healthcare, housing, and family cost exposure.',
-    },
-    {
-      id: 'netherlands',
-      name: 'Netherlands',
-      type: 'comparison',
-      safety: 83,
-      affordability: 45,
-      familyComfort: 81,
-      wealthUpside: 67,
-      notes: 'Very strong family and stability profile, but housing pressure is a major constraint.',
-    },
-    {
-      id: 'canada',
-      name: 'Canada',
-      type: 'comparison',
-      safety: 82,
-      affordability: 42,
-      familyComfort: 77,
-      wealthUpside: 64,
-      notes: 'Solid long-horizon livability and safety, but affordability in key metros is punishing.',
-    },
-  ],
+  weights: { wealth: 35, safety: 30, housing: 20, career: 10, energy: 5 },
+  comparisonCountryIds: ['netherlands', 'canada'],
   opportunities: [
-    {
-      title: 'Wildlife trafficking and OSINT consulting micro-practice',
-      type: 'leveraged income',
-      fit: 96,
-      upside: 87,
-      energy: 58,
-      risk: 'Medium',
-      why: 'Matches your exact edge. Best near-term path for high-value services without learning a new field from zero.',
-    },
-    {
-      title: 'Premium training on AI-assisted online harm monitoring',
-      type: 'semi-passive after setup',
-      fit: 91,
-      upside: 74,
-      energy: 50,
-      risk: 'Medium',
-      why: 'High expertise match and can be productized into workshops, short courses, or institutional training.',
-    },
-    {
-      title: 'Niche SaaS or dashboard tools for enforcement / conservation monitoring',
-      type: 'leveraged income',
-      fit: 83,
-      upside: 84,
-      energy: 71,
-      risk: 'High',
-      why: 'Large upside but slower path. Strong if built from a problem you already know people will pay to solve.',
-    },
-    {
-      title: 'Higher-pay international analyst or intelligence role',
-      type: 'active income',
-      fit: 88,
-      upside: 72,
-      energy: 42,
-      risk: 'Low',
-      why: 'Good path to stabilize the base income and gain stronger institutional signaling value.',
-    },
-    {
-      title: 'General creator/influencer monetization',
-      type: 'speculative',
-      fit: 34,
-      upside: 66,
-      energy: 79,
-      risk: 'High',
-      why: 'Possible, but less aligned than expert-led content or premium niche intelligence products.',
-    },
+    { title: 'Wildlife trafficking and OSINT consulting micro-practice', type: 'leveraged income', fit: 96, upside: 87, energy: 58, risk: 'Medium', why: 'Highest profile fit and fastest path to premium pricing without re-training.' },
+    { title: 'Premium training on AI-assisted online harm monitoring', type: 'semi-passive after setup', fit: 91, upside: 74, energy: 50, risk: 'Medium', why: 'Can convert expertise into productized workshops and institutional programs.' },
+    { title: 'Niche SaaS or dashboard tools for enforcement / conservation monitoring', type: 'leveraged income', fit: 83, upside: 84, energy: 71, risk: 'High', why: 'Large upside if built around a known paid problem; slower to monetize.' },
+    { title: 'Higher-pay international analyst or intelligence role', type: 'active income', fit: 88, upside: 72, energy: 42, risk: 'Low', why: 'Reliable path for compensation growth and credential strength.' },
+    { title: 'General creator/influencer monetization', type: 'speculative', fit: 34, upside: 66, energy: 79, risk: 'High', why: 'Possible but lower strategic fit than expertise-led offers.' },
   ],
   careerLanes: [
-    {
-      title: 'INTERPOL / Europol / international enforcement analyst track',
-      fit: 90,
-      payoff: 'High salary + mission fit + prestige',
-      action: 'Build a reusable targeted application packet and track vacancies weekly.',
-    },
-    {
-      title: 'Conservation and illicit-trade consultancy track',
-      fit: 95,
-      payoff: 'High-margin niche advisory potential',
-      action: 'Package 3 offers: monitoring system design, AI-assisted detection workflow review, and intelligence reporting support.',
-    },
-    {
-      title: 'Remote strategic analyst roles linked to OSINT, risk, and monitoring',
-      fit: 82,
-      payoff: 'Could materially lift income without relocation',
-      action: 'Watch remote and Brussels/France-linked analyst openings with keyword filters.',
-    },
-    {
-      title: 'Thought leadership and research publishing lane',
-      fit: 76,
-      payoff: 'Indirect monetization via authority and lead flow',
-      action: 'Publish a short, high-signal expert output each month that demonstrates unique insight.',
-    },
+    { title: 'INTERPOL / Europol / international enforcement analyst track', fit: 90, payoff: 'High salary + mission fit + prestige', action: 'Maintain one reusable targeted application packet and scan vacancies weekly.' },
+    { title: 'Conservation and illicit-trade consultancy track', fit: 95, payoff: 'High-margin niche advisory potential', action: 'Offer 3 products: monitoring design, AI workflow review, intelligence reporting support.' },
+    { title: 'Remote strategic analyst roles linked to OSINT, risk, and monitoring', fit: 82, payoff: 'Material income lift without relocation', action: 'Monitor remote + Brussels + France roles with strict keyword filters.' },
+    { title: 'Thought leadership and research publishing lane', fit: 76, payoff: 'Authority and lead flow compounding', action: 'Publish one short high-signal expert output monthly.' },
   ],
   spouseIncomePaths: [
-    {
-      title: 'Scientific and educational writing',
-      fit: 87,
-      ramp: 'Fast-medium',
-      why: 'Compatible with flexible scheduling and can connect to primatology, conservation, parenting, or education niches.',
-    },
-    {
-      title: 'Remote education and tutoring content',
-      fit: 81,
-      ramp: 'Fast',
-      why: 'Can be offered in small blocks of time and productized later into lesson packs or digital resources.',
-    },
-    {
-      title: 'Primatology and research support services',
-      fit: 78,
-      ramp: 'Medium',
-      why: 'Niche but defensible. Could include literature support, science communication, or background research assistance.',
-    },
+    { title: 'Scientific and educational writing', fit: 87, ramp: 'Fast-medium', why: 'Fits flexible scheduling and links to primatology, conservation, parenting, and education niches.' },
+    { title: 'Remote education and tutoring content', fit: 81, ramp: 'Fast', why: 'Can run in small time blocks, then evolve into reusable products.' },
+    { title: 'Primatology and research support services', fit: 78, ramp: 'Medium', why: 'Niche defensibility with strong alignment and portfolio potential.' },
   ],
   threats: [
-    { title: 'Housing affordability drift', severity: 'Medium', note: 'A 5-year house plan needs stricter down-payment discipline if prices stay elevated in your preferred markets.' },
-    { title: 'One-income family pressure', severity: 'High', note: 'A child arrival increases the value of liquidity, clear buffers, and lower optional spending.' },
-    { title: 'Opportunity dilution', severity: 'Medium', note: 'Too many broad money ideas can waste time. The dashboard should keep forcing expertise-first choices.' },
+    { title: 'Housing affordability drift', severity: 'Medium', note: 'A 5-year house plan needs strict down-payment discipline if prices remain elevated.' },
+    { title: 'One-income family pressure', severity: 'High', note: 'A child arrival increases the value of liquidity and predictable cashflow.' },
+    { title: 'Opportunity dilution', severity: 'Medium', note: 'Too many broad ideas reduce execution quality. Keep expertise-first filters.' },
   ],
-  signals: {
-    weather: null,
-    hazards: [],
-    tech: [],
-    lastUpdated: null,
-  },
+  signals: { weather: null, hazards: [], tech: [], lastUpdated: null },
   connectors: [
     { name: 'Open-Meteo weather', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
     { name: 'NASA EONET hazards', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
-    { name: 'Hacker News API', type: 'API', status: 'live', note: 'Client-side fetch enabled for lightweight tech chatter.' },
-    { name: 'ACLED conflict feed', type: 'API', status: 'planned', note: 'Recommended for server-side integration later.' },
-    { name: 'World Bank indicators', type: 'API', status: 'planned', note: 'Good candidate for macro data in a later version.' },
-    { name: 'ECB data portal', type: 'API', status: 'planned', note: 'Use for Europe-centric rates and inflation later.' },
-    { name: 'INTERPOL vacancies', type: 'Page watch', status: 'mock', note: 'Official page target. Static site cannot crawl it reliably without backend help.' },
-    { name: 'ReliefWeb jobs', type: 'RSS/API', status: 'mock', note: 'Official opportunity source placeholder for later integration.' },
-    { name: 'IUCN jobs', type: 'Page watch', status: 'mock', note: 'Tracked as a priority source for conservation roles.' },
+    { name: 'Hacker News API', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
+    { name: 'ReliefWeb jobs', type: 'RSS/API', status: 'mock', note: 'Priority role source placeholder.' },
+    { name: 'INTERPOL vacancies', type: 'Page watch', status: 'mock', note: 'Static-site tracking target; backend needed for full automation.' },
   ],
+  meta: { lastEngine: null, lastSavedAt: null },
 };
 
-function clone(data) {
-  return JSON.parse(JSON.stringify(data));
+const E = {};
+
+const clone = (obj) => JSON.parse(JSON.stringify(obj));
+const round = (v) => Math.round(v);
+const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+const avg = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
+const euros = (value) => new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value);
+
+function buildCountries(stateRef) {
+  const base = ['belgium', 'france', 'united-states'];
+  const optional = stateRef.comparisonCountryIds.filter((id) => COUNTRY_LIBRARY[id] && !base.includes(id)).slice(0, 2);
+  return [...base, ...optional].map((id) => clone(COUNTRY_LIBRARY[id]));
+}
+
+function hydrateState(parsed = {}) {
+  const merged = {
+    ...clone(DEFAULT_STATE),
+    ...parsed,
+    profile: { ...clone(DEFAULT_STATE.profile), ...(parsed.profile || {}) },
+    weights: { ...clone(DEFAULT_STATE.weights), ...(parsed.weights || {}) },
+    opportunities: parsed.opportunities || clone(DEFAULT_STATE.opportunities),
+    careerLanes: parsed.careerLanes || clone(DEFAULT_STATE.careerLanes),
+    spouseIncomePaths: parsed.spouseIncomePaths || clone(DEFAULT_STATE.spouseIncomePaths),
+    threats: parsed.threats || clone(DEFAULT_STATE.threats),
+    signals: { ...clone(DEFAULT_STATE.signals), ...(parsed.signals || {}) },
+    connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
+    meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
+  };
+
+  merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
+  return merged;
 }
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return clone(DEFAULT_STATE);
-    const parsed = JSON.parse(raw);
-    return {
-      ...clone(DEFAULT_STATE),
-      ...parsed,
-      profile: { ...clone(DEFAULT_STATE.profile), ...(parsed.profile || {}) },
-      weights: { ...clone(DEFAULT_STATE.weights), ...(parsed.weights || {}) },
-      countries: parsed.countries || clone(DEFAULT_STATE.countries),
-      opportunities: parsed.opportunities || clone(DEFAULT_STATE.opportunities),
-      careerLanes: parsed.careerLanes || clone(DEFAULT_STATE.careerLanes),
-      spouseIncomePaths: parsed.spouseIncomePaths || clone(DEFAULT_STATE.spouseIncomePaths),
-      threats: parsed.threats || clone(DEFAULT_STATE.threats),
-      signals: { ...clone(DEFAULT_STATE.signals), ...(parsed.signals || {}) },
-      connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
-    };
+    return hydrateState(raw ? JSON.parse(raw) : {});
   } catch (error) {
     console.error('Failed to load state:', error);
-    return clone(DEFAULT_STATE);
+    return hydrateState({});
   }
 }
 
 let state = loadState();
 
 function saveState() {
+  state.meta.lastSavedAt = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function euros(value) {
-  return new Intl.NumberFormat('en-IE', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function round(value) {
-  return Math.round(value);
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function avg(values) {
-  if (!values.length) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function monthsRunway(profile) {
-  const monthlyBurn = profile.essentialCosts + profile.strategicSpending;
-  if (!monthlyBurn) return 0;
-  return profile.cashSavings / monthlyBurn;
-}
-
-function projectAssets(profile, years, monthlyContribution) {
-  const annualReturn = profile.expectedReturnPct / 100;
-  const monthlyRate = annualReturn / 12;
-  let total = profile.cashSavings + profile.investments;
-  for (let i = 0; i < years * 12; i += 1) {
-    total = total * (1 + monthlyRate) + monthlyContribution;
-  }
-  return total;
 }
 
 function normalizeWeights(weights) {
@@ -267,331 +205,189 @@ function normalizeWeights(weights) {
   return Object.fromEntries(Object.entries(weights).map(([key, value]) => [key, value / total]));
 }
 
-function computeCountryScores(country, weights) {
-  const normalized = normalizeWeights(weights);
-  const combined =
-    country.wealthUpside * normalized.wealth +
-    country.safety * normalized.safety +
-    country.affordability * normalized.housing +
-    country.familyComfort * (normalized.safety * 0.5 + normalized.housing * 0.5) +
-    country.wealthUpside * normalized.career +
-    (100 - Math.abs(50 - country.familyComfort)) * normalized.energy;
-  return round(combined);
+function monthsRunway(profile) {
+  const burn = profile.essentialCosts + profile.strategicSpending;
+  return burn ? profile.cashSavings / burn : 0;
+}
+
+function projectAssets(profile, years, monthlyContribution) {
+  const monthlyRate = (profile.expectedReturnPct / 100) / 12;
+  let total = profile.cashSavings + profile.investments;
+  for (let month = 0; month < years * 12; month += 1) total = total * (1 + monthlyRate) + monthlyContribution;
+  return total;
+}
+
+function computeCountryScores(country, normalizedWeights, profile) {
+  const oneIncomePressure = clamp((profile.essentialCosts / Math.max(profile.netIncome, 1)) * 100, 0, 100);
+  const familyStability = avg([country.safety, country.familyComfort, country.childcareSupport]);
+  const housingStressPenalty = clamp(65 - country.affordability, 0, 35);
+  const weighted =
+    country.wealthUpside * normalizedWeights.wealth +
+    familyStability * normalizedWeights.safety +
+    country.affordability * normalizedWeights.housing +
+    country.remoteCareerFit * normalizedWeights.career +
+    (100 - profile.weekendBurnout) * normalizedWeights.energy;
+  const total = clamp(round(weighted - housingStressPenalty * 0.25 - oneIncomePressure * 0.08), 0, 100);
+  return {
+    ...country,
+    familyStability: round(familyStability),
+    housingStressPenalty: round(housingStressPenalty),
+    total,
+  };
 }
 
 function computeEngine(stateRef) {
-  const { profile, weights, countries, opportunities, spouseIncomePaths, careerLanes } = stateRef;
+  const { profile, opportunities, spouseIncomePaths, careerLanes } = stateRef;
+  const countries = buildCountries(stateRef);
+  const normalizedWeights = normalizeWeights(stateRef.weights);
+
   const monthlyBuffer = profile.netIncome - profile.essentialCosts - profile.strategicSpending;
   const investableSurplus = Math.max(monthlyBuffer, 0);
   const conservativeContribution = investableSurplus * 0.65;
+  const runway = monthsRunway(profile);
   const houseProjection = profile.cashSavings + conservativeContribution * 12 * profile.homeGoalYears;
   const tenYearAssets = projectAssets(profile, 10, conservativeContribution + profile.sideIncomeTarget * 0.45);
-  const runway = monthsRunway(profile);
 
-  const wealthScore = clamp(round(
-    (investableSurplus / Math.max(profile.netIncome, 1)) * 40 +
-    clamp((houseProjection / profile.targetHouseFund) * 35, 0, 35) +
-    clamp((tenYearAssets / 300000) * 25, 0, 25)
-  ), 0, 100);
+  const savingsRate = clamp((investableSurplus / Math.max(profile.netIncome, 1)) * 100, 0, 100);
+  const wealthScore = clamp(round(savingsRate * 0.45 + clamp((houseProjection / profile.targetHouseFund) * 100, 0, 100) * 0.3 + clamp((tenYearAssets / 320000) * 100, 0, 100) * 0.25), 0, 100);
 
-  const resilienceScore = clamp(round(
-    clamp((runway / 12) * 55, 0, 55) +
-    clamp((profile.spouseIncomeTarget / 1000) * 15, 0, 15) +
-    clamp(((profile.netIncome - profile.essentialCosts) / profile.netIncome) * 20, 0, 20) +
-    clamp((100 - profile.weekendBurnout) * 0.1, 0, 10)
-  ), 0, 100);
+  const weekendProtection = clamp(round(100 - (profile.weekendBurnout * 0.7 + Math.max(profile.weeklyHours - 42, 0) * 1.8)), 0, 100);
+  const resilienceScore = clamp(round(clamp((runway / 12) * 100, 0, 100) * 0.5 + clamp((profile.spouseIncomeTarget / 1200) * 100, 0, 100) * 0.2 + clamp((profile.netIncome - profile.essentialCosts) / Math.max(profile.netIncome, 1) * 100, 0, 100) * 0.2 + weekendProtection * 0.1), 0, 100);
 
-  const burnoutLoadScore = clamp(round(100 - (profile.weeklyHours * 0.9 + profile.weekendBurnout * 0.45 - 12)), 0, 100);
-  const spousePotential = clamp(round(avg(spouseIncomePaths.map(path => path.fit)) * 0.8 + (profile.spouseIncomeTarget / 10)), 0, 100);
-  const careerLeverageScore = clamp(round(avg(careerLanes.map(lane => lane.fit)) * 0.78 + (profile.sideIncomeTarget / 80)), 0, 100);
-  const locationScores = countries.map(country => ({ ...country, total: computeCountryScores(country, weights) })).sort((a, b) => b.total - a.total);
+  const spousePotential = clamp(round(avg(spouseIncomePaths.map((path) => path.fit)) * 0.82 + (profile.spouseIncomeTarget / 14)), 0, 100);
+  const careerLeverageScore = clamp(round(avg(careerLanes.map((lane) => lane.fit)) * 0.75 + (profile.sideIncomeTarget / 18)), 0, 100);
+  const opportunityScore = clamp(round(avg(opportunities.map((opp) => opp.fit * 0.58 + opp.upside * 0.42))), 0, 100);
+
+  const locationScores = countries.map((country) => computeCountryScores(country, normalizedWeights, profile)).sort((a, b) => b.total - a.total);
   const topCountry = locationScores[0];
-  const locationScore = topCountry.total;
-  const familyScore = clamp(round((resilienceScore * 0.4) + (topCountry.familyComfort * 0.35) + (burnoutLoadScore * 0.25)), 0, 100);
-  const opportunityScore = clamp(round(avg(opportunities.map(opp => (opp.fit * 0.55) + (opp.upside * 0.45))) / 1.15), 0, 100);
+  const familyScore = clamp(round(resilienceScore * 0.35 + topCountry.familyStability * 0.4 + weekendProtection * 0.25), 0, 100);
 
-  const normalizedWeights = normalizeWeights(weights);
   const compositeScore = clamp(round(
     wealthScore * normalizedWeights.wealth +
     resilienceScore * normalizedWeights.safety +
-    locationScore * normalizedWeights.housing +
+    topCountry.total * normalizedWeights.housing +
     careerLeverageScore * normalizedWeights.career +
-    burnoutLoadScore * normalizedWeights.energy
+    weekendProtection * normalizedWeights.energy
   ), 0, 100);
 
   return {
+    monthlyBuffer,
     investableSurplus,
     conservativeContribution,
+    runway,
     houseProjection,
     tenYearAssets,
-    runway,
+    savingsRate,
     wealthScore,
     resilienceScore,
-    burnoutLoadScore,
+    weekendProtection,
     spousePotential,
     careerLeverageScore,
+    opportunityScore,
     locationScores,
     topCountry,
-    locationScore,
     familyScore,
-    opportunityScore,
     compositeScore,
   };
 }
 
-function buildRecommendation({ title, horizon, description, payoff, risk, time, confidence, meta }) {
-  return { title, horizon, description, payoff, risk, time, confidence, meta };
+function computeChanges(currentEngine, previousEngine) {
+  if (!previousEngine) return [{ label: 'Baseline initialized', detail: 'No prior snapshot was available, so this is the first strategic baseline.' }];
+
+  const tracked = [
+    { key: 'wealthScore', label: 'Wealth score' },
+    { key: 'resilienceScore', label: 'Resilience score' },
+    { key: 'careerLeverageScore', label: 'Career leverage' },
+    { key: 'familyScore', label: 'Family readiness' },
+    { key: 'compositeScore', label: 'Composite score' },
+  ];
+
+  const changes = tracked
+    .map(({ key, label }) => ({ label, delta: currentEngine[key] - previousEngine[key], now: currentEngine[key] }))
+    .filter((item) => Math.abs(item.delta) >= 1)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 4)
+    .map((item) => ({
+      label: `${item.label} ${item.delta > 0 ? 'improved' : 'declined'} by ${Math.abs(item.delta)} pts`,
+      detail: `Now at ${item.now}. This shift should influence task intensity and where you focus this week.`,
+    }));
+
+  return changes.length ? changes : [{ label: 'No major score shifts', detail: 'Your strategic baseline is stable since the last save.' }];
 }
 
 function generateBriefing(stateRef, engine) {
-  const { profile, opportunities, careerLanes, spouseIncomePaths, threats } = stateRef;
-  const topOpps = clone(opportunities)
-    .sort((a, b) => ((b.fit * 0.55 + b.upside * 0.45) - (a.fit * 0.55 + a.upside * 0.45)));
+  const topOpps = clone(stateRef.opportunities)
+    .sort((a, b) => (b.fit * 0.58 + b.upside * 0.42) - (a.fit * 0.58 + a.upside * 0.42));
 
-  const today = [
-    buildRecommendation({
-      title: 'Spend 45 focused minutes on your highest-value expertise lane',
-      horizon: 'Today',
-      meta: 'Income leverage | Expertise-first',
-      description: `Push one asset that compounds: a consultancy offer draft, an expert brief, or one targeted application to a high-fit role. Your best lane remains ${topOpps[0].title.toLowerCase()}.`,
-      payoff: 'High leverage',
-      risk: 'Low risk',
-      time: '45-60 min',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: 'Protect the house-fund base before chasing new ideas',
-      horizon: 'Today',
-      meta: 'Family stability | Capital discipline',
-      description: `Your 5-year home runway improves most from disciplined monthly allocation, not extra speculative ideas. Current projected house fund: ${euros(engine.houseProjection)}.`,
-      payoff: 'Stability gain',
-      risk: 'Low risk',
-      time: '20 min',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: profile.weekendBurnout > 65 ? 'Use a low-energy task format tonight' : 'Add one medium-effort task tonight',
-      horizon: 'Today',
-      meta: 'Energy preservation',
-      description: profile.weekendBurnout > 65
-        ? 'Because weekend burnout is high, prefer admin, reading, or setup work rather than deep execution. The app is intentionally throttling ambition here.'
-        : 'Your load is manageable enough to support one additional medium-effort task if it clearly supports income or family security.',
-      payoff: 'Burnout control',
-      risk: 'Low risk',
-      time: '15-30 min',
-      confidence: 'High',
-    }),
-  ];
-
-  const week = [
-    buildRecommendation({
-      title: 'Package 3 paid offers from your current expertise',
-      horizon: 'This week',
-      meta: 'Consultancy lane',
-      description: 'Define three services with a clear outcome, example deliverable, and price anchor. One offer should target AI-assisted monitoring systems, one OSINT/intelligence workflows, and one illicit-trade or conservation analytics support.',
-      payoff: 'Income optionality',
-      risk: 'Medium risk',
-      time: '2-3 hrs',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: `Track 5 official target sources for roles like ${careerLanes[0].title.toLowerCase()}`,
-      horizon: 'This week',
-      meta: 'Career acceleration',
-      description: 'Use the official watchlist and create a repeatable weekly scan. The point is not volume. The point is to stop missing high-fit openings.',
-      payoff: 'Career leverage',
-      risk: 'Low risk',
-      time: '1 hr',
-      confidence: 'Medium',
-    }),
-    buildRecommendation({
-      title: 'Formalize one remote-income pilot for your wife',
-      horizon: 'This week',
-      meta: 'Household resilience',
-      description: `The best current spouse-fit lane is ${spouseIncomePaths[0].title.toLowerCase()}. Start with a low-pressure pilot that could later expand when family bandwidth allows.`,
-      payoff: 'Resilience gain',
-      risk: 'Low risk',
-      time: '1-2 hrs',
-      confidence: 'Medium',
-    }),
-  ];
-
-  const month = [
-    buildRecommendation({
-      title: 'Publish one authority-building output',
-      horizon: 'This month',
-      meta: 'Signal and lead generation',
-      description: 'Release one short but strong output that proves rare expertise. It could be a briefing, dashboard demo, analytical post, or technical note. Authority compounds into better jobs and better clients.',
-      payoff: 'Lead magnet',
-      risk: 'Low risk',
-      time: '4-6 hrs',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: 'Increase automatic long-term capital flow',
-      horizon: 'This month',
-      meta: 'Wealth engine',
-      description: 'Even a moderate automatic increase matters. The app will keep preferring systematic wealth building over random speculation.',
-      payoff: 'Wealth compounding',
-      risk: 'Low risk',
-      time: '30 min',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: `Stress-test ${engine.topCountry.name} vs Belgium vs France for family life`,
-      horizon: 'This month',
-      meta: 'Location strategy',
-      description: 'Do not assume the highest-upside country is the best family fit. Force a side-by-side comparison of wealth upside, housing pressure, and family friction.',
-      payoff: 'Better long-horizon decisions',
-      risk: 'Low risk',
-      time: '90 min',
-      confidence: 'High',
-    }),
-  ];
-
-  const year = [
-    buildRecommendation({
-      title: 'Lift household income through one major and one secondary channel',
-      horizon: 'This year',
-      meta: 'Balanced wealth strategy',
-      description: 'Primary path: better-compensated analyst/consultancy work. Secondary path: expertise-led product or service. The app is deliberately avoiding shallow side-hustle churn.',
-      payoff: 'Major trajectory shift',
-      risk: 'Medium risk',
-      time: '12-month focus',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: 'Create an explicit family liquidity floor',
-      horizon: 'This year',
-      meta: 'Child and household security',
-      description: 'Keep a clearly separated cash safety layer so that house planning and investing do not cannibalize family security.',
-      payoff: 'Resilience',
-      risk: 'Low risk',
-      time: '1-2 sessions',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: 'Build a recognizable niche identity',
-      horizon: 'This year',
-      meta: 'Career compounding',
-      description: 'You should become easier to categorize at the high end: intelligence systems for online harms, illicit trade analysis, AI-enabled monitoring, or similar.',
-      payoff: 'Higher-value opportunities',
-      risk: 'Low risk',
-      time: 'Ongoing',
-      confidence: 'Medium',
-    }),
-  ];
-
-  const fiveYear = [
-    buildRecommendation({
-      title: 'Reach the home-purchase decision point with optionality intact',
-      horizon: '5 years',
-      meta: 'House goal',
-      description: `Target a house-fund level near ${euros(stateRef.profile.targetHouseFund)} while preserving emergency resilience. The goal is not just to buy, but to buy without regret or fragility.`,
-      payoff: 'Family lifestyle base',
-      risk: 'Medium risk',
-      time: '5-year track',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: 'Have at least two durable income engines',
-      horizon: '5 years',
-      meta: 'Wealth diversification',
-      description: 'One should be your main work or consulting lane. The second should be an expertise-led product, training line, retainer, or premium service.',
-      payoff: 'Wealth resilience',
-      risk: 'Medium risk',
-      time: '5-year track',
-      confidence: 'High',
-    }),
-    buildRecommendation({
-      title: 'Choose location based on wealth + family quality, not ideology',
-      horizon: '5 years',
-      meta: 'Location realism',
-      description: 'Your final destination should maximize both upward financial movement and everyday family life, not just salary headlines or vague lifestyle fantasies.',
-      payoff: 'Long-term fit',
-      risk: 'Low risk',
-      time: '5-year track',
-      confidence: 'High',
-    }),
-  ];
-
-  const tenYear = [
-    buildRecommendation({
-      title: 'Primary destination: high-wealth, high-comfort family life with geographic optionality',
-      horizon: '10 years',
-      meta: 'Destination plan',
-      description: 'By 10 years, the target state is a strong asset base, a comfortable home, at least one flexible income engine, and the ability to stay or relocate without stress. This is not just higher income. It is strategic freedom.',
-      payoff: 'Strategic freedom',
-      risk: 'Medium risk',
-      time: '10-year track',
-      confidence: 'Medium',
-    }),
-  ];
+  const weekendMode = stateRef.profile.weekendBurnout >= 65;
 
   return {
-    today,
-    week,
-    month,
-    year,
-    fiveYear,
-    tenYear,
+    today: [
+      { title: 'Ship one high-value output in your strongest lane', meta: 'Income leverage | Expertise-first', description: `Prioritize ${topOpps[0].title.toLowerCase()} and complete one concrete output (proposal, brief, or targeted application).`, payoff: 'High leverage', risk: 'Low risk', time: '45-60 min', confidence: 'High' },
+      { title: 'Lock house-fund transfer before discretionary spending', meta: 'Stability | House horizon', description: `Projected 5-year house fund is ${euros(engine.houseProjection)} versus target ${euros(stateRef.profile.targetHouseFund)}. Automate first, optimize later.`, payoff: 'Stability gain', risk: 'Low risk', time: '15 min', confidence: 'High' },
+      { title: weekendMode ? 'Weekend protection ON: run low-cognitive tasks only' : 'Weekend protection OFF: one medium push is allowed', meta: 'Energy protocol', description: weekendMode ? 'Burnout is elevated, so this engine is protecting recovery. Keep weekend execution to admin, maintenance, and setup tasks.' : 'Energy load is acceptable. Add one medium-effort strategic task, then hard-stop.', payoff: 'Burnout control', risk: 'Low risk', time: '20-40 min', confidence: 'High' },
+    ],
     whyNow: [
-      { title: 'Family timing pressure', detail: 'A child on the way increases the value of buffers, systems, and a calmer money strategy.' },
-      { title: 'Expertise edge exists now', detail: 'Your strongest income leverage is not generic online hustle. It is packaging rare expertise already built over years.' },
-      { title: 'Housing clock is medium-term', detail: 'A 5-year target is close enough to require discipline now but far enough to retain flexibility.' },
+      { title: 'Family runway pressure is real', detail: `Runway is ${round(engine.runway)} months. Child-related uncertainty makes liquidity timing critical.` },
+      { title: 'Opportunity quality is concentrated', detail: `Top lane fit is ${topOpps[0].fit}/100; broad side-hustle exploration should stay deprioritized.` },
+      { title: 'House horizon has a fixed date', detail: `${stateRef.profile.homeGoalYears}-year home objective requires consistent monthly discipline now.` },
     ],
     narrative: [
-      'The strategy is to increase wealth without creating household fragility.',
-      'That means expertise-led income growth, strong family liquidity, disciplined long-term investing, and a location choice filtered through both comfort and upside.',
-      `Current best fit destination in this seeded model is ${engine.topCountry.name}, but the dashboard treats this as a decision hypothesis, not truth.`
+      'Balanced mode means compounding wealth without adding family fragility.',
+      'Primary engine: expert-led compensation growth. Safety engine: cash runway and workload limits.',
+      `Current country leader is ${engine.topCountry.name}, treated as a testable hypothesis rather than final truth.`,
     ],
     checkpoints: [
-      { title: 'Income engines', detail: 'Do you still rely on one income source only?' },
-      { title: 'Home fund pace', detail: `Are you still on track for roughly ${euros(stateRef.profile.targetHouseFund)} in ${stateRef.profile.homeGoalYears} years?` },
-      { title: 'Authority building', detail: 'Have you published or shipped something that makes high-value opportunities more likely?' },
+      { title: 'Income concentration', detail: 'Are you still relying on one income stream only?' },
+      { title: 'Weekend protection compliance', detail: weekendMode ? 'You are in strict low-energy mode. Avoid heavy tasks this weekend.' : 'Energy is acceptable. Use one bounded strategic session then stop.' },
+      { title: 'Home fund path', detail: `Progress toward ${euros(stateRef.profile.targetHouseFund)} in ${stateRef.profile.homeGoalYears} years remains visible.` },
     ],
     wealthRecs: [
-      { title: 'Increase automated investing when surplus stabilizes', detail: 'Raise contributions gradually instead of waiting for the perfect market entry.' },
-      { title: 'Separate safety cash from house fund', detail: 'Do not let the future home deposit eat the emergency layer needed for family stability.' },
-      { title: 'Allocate high-upside effort to expertise-led income, not random speculation', detail: 'The profile fit is much stronger for consulting, tools, and institutional roles.' },
+      { title: 'Increase automated investing when surplus remains positive for 3 months', detail: 'Use stability trigger rules instead of emotional timing.' },
+      { title: 'Protect safety cash from house allocation drift', detail: 'Never compromise emergency runway for faster down-payment optics.' },
+      { title: 'Route high-effort hours into premium expertise packaging', detail: 'Time return is stronger than generic speculative opportunities.' },
     ],
     familyRecs: [
-      { title: 'Protect weekends by default', detail: 'The system deliberately limits weekend load because sustained burnout destroys compounding.' },
-      { title: 'Pilot spouse income in small blocks', detail: 'Favor flexible writing, educational, or research-adjacent work that can scale later.' },
-      { title: 'Keep at least 12 months of runway visible', detail: 'A child makes hidden financial fragility much more expensive.' },
+      { title: 'Codify a weekend recovery protocol', detail: 'Pre-define low-energy tasks and a hard stop time for Saturday/Sunday.' },
+      { title: 'Run one spouse-income micro-pilot per month', detail: 'Small predictable experiments beat large uncertain launches.' },
+      { title: 'Maintain a visible one-year cash floor', detail: 'House plans and risk investments should be built above this floor.' },
     ],
     topOpps,
-    threats,
+    opportunityRadar: topOpps.slice(0, 4).map((opp, index) => ({
+      title: opp.title,
+      detail: `${opp.why} Score ${round(opp.fit * 0.58 + opp.upside * 0.42)}/100.`,
+      kicker: `${index + 1} • ${opp.type}`,
+    })),
   };
 }
 
 function getDirective(engine) {
-  if (engine.wealthScore < 60) {
+  if (engine.weekendProtection < 45) {
     return {
-      title: 'Stabilize the base before chasing aggressive upside.',
-      text: 'Your next major gains come from stronger surplus discipline and expertise-led income, not from adding more noise. The dashboard is prioritizing family stability and strategic leverage over excitement.',
-      tags: ['Capital discipline', 'Lower downside', 'Family-first buffer'],
+      title: 'Energy protection first: avoid compounding burnout.',
+      text: 'The dashboard is throttling ambition because overload destroys execution quality and family stability.',
+      tags: ['Weekend guardrails', 'Family bandwidth', 'Sustainable pace'],
     };
   }
-  if (engine.careerLeverageScore >= 75 && engine.familyScore >= 70) {
+  if (engine.wealthScore < 60) {
     return {
-      title: 'Convert rare expertise into higher income while preserving family bandwidth.',
-      text: 'You are in a strong position to build wealth through a mix of higher-value analyst work, specialized consulting, and selective productization. The engine is favoring high-fit lanes instead of generic side-income clutter.',
-      tags: ['Expertise-first', 'Balanced strategy', '5-year house plan'],
+      title: 'Stabilize surplus and house-fund cadence before aggressive upside.',
+      text: 'Current profile rewards disciplined automation, focused income lanes, and reduced optional-spend leakage.',
+      tags: ['Capital discipline', 'Lower downside', 'House horizon'],
     };
   }
   return {
-    title: 'Reduce fragility and build optionality.',
-    text: 'The system sees good long-term potential, but it wants more household resilience, cleaner execution, and fewer diluted efforts. The path forward is focus, buffers, and leverage.',
-    tags: ['Risk control', 'Liquidity', 'Execution focus'],
+    title: 'Convert expertise into higher income while preserving family resilience.',
+    text: 'You can press for compensation growth through a focused combination of consultancy offers and high-fit analyst opportunities.',
+    tags: ['Expertise-first', 'Balanced strategy', 'Compounding outputs'],
   };
 }
 
-function createRecommendationNode(rec) {
+function recommendationNode(rec) {
   const template = document.getElementById('recommendation-template');
   const node = template.content.cloneNode(true);
   node.querySelector('.rec-title').textContent = rec.title;
-  node.querySelector('.rec-meta').textContent = rec.meta || rec.horizon;
+  node.querySelector('.rec-meta').textContent = rec.meta;
   node.querySelector('.rec-description').textContent = rec.description;
   node.querySelector('.confidence-pill').textContent = rec.confidence;
   node.querySelector('.rec-payoff').textContent = rec.payoff;
@@ -600,88 +396,75 @@ function createRecommendationNode(rec) {
   return node;
 }
 
-function renderStack(containerId, items, renderer) {
-  const container = document.getElementById(containerId);
-  container.innerHTML = '';
-  if (!items || !items.length) {
-    container.innerHTML = '<p class="empty-state">Nothing to show yet.</p>';
-    return;
-  }
-  items.forEach(item => {
-    const node = renderer(item);
-    container.appendChild(node);
-  });
-}
-
 function noteCard(item, kicker = '') {
   const article = document.createElement('article');
   article.className = 'note-card';
-  article.innerHTML = `
-    ${kicker ? `<span class="note-kicker">${kicker}</span>` : ''}
-    <h4>${item.title}</h4>
-    <p>${item.detail || item.note || item.why || ''}</p>
-  `;
+  article.innerHTML = `${kicker ? `<span class="note-kicker">${kicker}</span>` : ''}<h4>${item.title}</h4><p>${item.detail || ''}</p>`;
   return article;
 }
 
-function renderOverview(engine, briefing) {
+function renderStack(container, items, renderer) {
+  container.innerHTML = '';
+  if (!items?.length) {
+    container.innerHTML = '<p class="empty-state">Nothing to show yet.</p>';
+    return;
+  }
+  items.forEach((item) => container.appendChild(renderer(item)));
+}
+
+function renderOverview(engine, briefing, changeItems) {
   const directive = getDirective(engine);
-  document.getElementById('primary-directive-title').textContent = directive.title;
-  document.getElementById('primary-directive-text').textContent = directive.text;
-  document.getElementById('directive-tags').innerHTML = directive.tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+  E.primaryDirectiveTitle.textContent = directive.title;
+  E.primaryDirectiveText.textContent = directive.text;
+  E.directiveTags.innerHTML = directive.tags.map((tag) => `<span class="tag">${tag}</span>`).join('');
 
-  document.getElementById('wealth-score').textContent = engine.wealthScore;
-  document.getElementById('resilience-score').textContent = engine.resilienceScore;
-  document.getElementById('location-score').textContent = engine.locationScore;
-  document.getElementById('career-score').textContent = engine.careerLeverageScore;
-  document.getElementById('composite-score').textContent = engine.compositeScore;
+  E.wealthScore.textContent = engine.wealthScore;
+  E.resilienceScore.textContent = engine.resilienceScore;
+  E.locationScore.textContent = engine.topCountry.total;
+  E.careerScore.textContent = engine.careerLeverageScore;
+  E.compositeScore.textContent = engine.compositeScore;
+  E.weekendProtectionScore.textContent = engine.weekendProtection;
 
-  const scoreRing = document.getElementById('composite-score-ring');
   const degrees = Math.max(4, Math.round(engine.compositeScore * 3.6));
-  scoreRing.style.background = `conic-gradient(var(--accent) 0deg, var(--accent-2) ${degrees}deg, rgba(255,255,255,0.08) ${degrees}deg)`;
+  E.compositeScoreRing.style.background = `conic-gradient(var(--accent) 0deg, var(--accent-2) ${degrees}deg, rgba(255,255,255,0.08) ${degrees}deg)`;
 
-  renderStack('today-actions', briefing.today, createRecommendationNode);
-  renderStack('why-now', briefing.whyNow, item => noteCard(item, 'Signal'));
-  renderStack('threat-list', briefing.threats, item => noteCard(item, item.severity));
-  renderStack('opportunity-lanes', briefing.topOpps.slice(0, 3), item => noteCard({ title: item.title, detail: item.why }, item.type));
-  renderStack('checkpoint-list', briefing.checkpoints, item => noteCard(item, 'Checkpoint'));
+  renderStack(E.todayActions, briefing.today, recommendationNode);
+  renderStack(E.whyNow, briefing.whyNow, (item) => noteCard(item, 'Why now'));
+  renderStack(E.whatChanged, changeItems, (item) => noteCard(item, 'Change'));
+  renderStack(E.threatList, state.threats, (item) => noteCard({ title: item.title, detail: item.note }, item.severity));
+  renderStack(E.opportunityLanes, briefing.topOpps.slice(0, 3), (item) => noteCard({ title: item.title, detail: item.why }, item.type));
+  renderStack(E.checkpointList, briefing.checkpoints, (item) => noteCard(item, 'Checkpoint'));
 }
 
 function renderHorizons(briefing) {
-  const timeline = document.getElementById('horizon-timeline');
-  timeline.innerHTML = '';
-
   const blocks = [
     { label: 'Today', items: briefing.today },
-    { label: 'This week', items: briefing.week },
-    { label: 'This month', items: briefing.month },
-    { label: 'This year', items: briefing.year },
-    { label: '5 years', items: briefing.fiveYear },
-    { label: '10 years', items: briefing.tenYear },
+    { label: 'This week', items: [{ title: 'Package 3 paid offers from current expertise', description: 'Define clear outcomes, deliverables, and pricing anchors.' }] },
+    { label: 'This month', items: [{ title: 'Publish one authority artifact', description: 'A brief, post, or demo that signals rare capability.' }] },
+    { label: 'This year', items: [{ title: 'Build two income engines', description: 'Primary compensation upgrade + secondary expertise productized line.' }] },
+    { label: '5 years', items: [{ title: 'Reach home-purchase decision with optionality', description: 'Hit target fund without eroding family safety buffers.' }] },
+    { label: '10 years', items: [{ title: 'High-wealth and high-family-comfort position', description: 'Geographic flexibility, strong assets, and low stress dependency.' }] },
   ];
 
-  blocks.forEach(block => {
+  E.horizonTimeline.innerHTML = '';
+  blocks.forEach((block) => {
     const wrapper = document.createElement('div');
     wrapper.className = 'timeline-item';
-    wrapper.innerHTML = `
-      <h4>${block.label}</h4>
-      <p>${block.items[0].title}</p>
-      <p class="muted small" style="margin-top:8px;">${block.items[0].description}</p>
-    `;
-    timeline.appendChild(wrapper);
+    wrapper.innerHTML = `<h4>${block.label}</h4><p>${block.items[0].title}</p><p class="muted small" style="margin-top:8px;">${block.items[0].description}</p>`;
+    E.horizonTimeline.appendChild(wrapper);
   });
 
-  renderStack('strategy-narrative', briefing.narrative.map(text => ({ title: 'Strategy view', detail: text })), item => noteCard(item, 'Narrative'));
+  renderStack(E.strategyNarrative, briefing.narrative.map((text) => ({ title: 'Strategy view', detail: text })), (item) => noteCard(item, 'Narrative'));
 }
 
 function renderWealth(engine, briefing) {
-  document.getElementById('monthly-surplus').textContent = euros(engine.investableSurplus);
-  document.getElementById('house-fund-projection').textContent = euros(engine.houseProjection);
-  document.getElementById('ten-year-assets').textContent = euros(engine.tenYearAssets);
+  E.monthlySurplus.textContent = euros(engine.investableSurplus);
+  E.houseFundProjection.textContent = euros(engine.houseProjection);
+  E.tenYearAssets.textContent = euros(engine.tenYearAssets);
 
-  document.getElementById('surplus-meter').style.width = `${clamp((engine.investableSurplus / state.profile.netIncome) * 100, 0, 100)}%`;
-  document.getElementById('house-meter').style.width = `${clamp((engine.houseProjection / state.profile.targetHouseFund) * 100, 0, 100)}%`;
-  document.getElementById('asset-meter').style.width = `${clamp((engine.tenYearAssets / 400000) * 100, 0, 100)}%`;
+  E.surplusMeter.style.width = `${clamp((engine.investableSurplus / Math.max(state.profile.netIncome, 1)) * 100, 0, 100)}%`;
+  E.houseMeter.style.width = `${clamp((engine.houseProjection / state.profile.targetHouseFund) * 100, 0, 100)}%`;
+  E.assetMeter.style.width = `${clamp((engine.tenYearAssets / 400000) * 100, 0, 100)}%`;
 
   const rows = [
     { label: 'Safety reserve', pct: 30, value: state.profile.cashSavings * 0.3 },
@@ -690,214 +473,170 @@ function renderWealth(engine, briefing) {
     { label: 'Strategic opportunity', pct: 10, value: state.profile.cashSavings * 0.1 },
   ];
 
-  const container = document.getElementById('capital-allocation');
-  container.innerHTML = rows.map(row => `
-    <div class="allocation-row">
-      <p>${row.label}</p>
-      <div class="meter"><span style="width:${row.pct}%"></span></div>
-      <p>${euros(row.value)}</p>
-    </div>
-  `).join('');
-
-  renderStack('wealth-recommendations', briefing.wealthRecs, item => noteCard(item, 'Wealth'));
+  E.capitalAllocation.innerHTML = rows.map((row) => `<div class="allocation-row"><p>${row.label}</p><div class="meter"><span style="width:${row.pct}%"></span></div><p>${euros(row.value)}</p></div>`).join('');
+  renderStack(E.wealthRecommendations, briefing.wealthRecs, (item) => noteCard(item, 'Wealth'));
 }
 
-function renderLocations(engine) {
-  const container = document.getElementById('country-comparison');
-  container.innerHTML = engine.locationScores.map(country => `
+function renderLocation(engine) {
+  E.countryComparison.innerHTML = engine.locationScores.map((country) => `
     <article class="country-card">
       <div>
-        <h4 class="country-name">${country.name} ${country.type === 'priority' ? '<span class="inline-pill">Priority</span>' : ''}</h4>
+        <h4 class="country-name">${country.name} ${country.type === 'priority' ? '<span class="inline-pill">Core</span>' : '<span class="inline-pill">Optional</span>'}</h4>
         <p class="country-meta">${country.notes}</p>
       </div>
       <div class="country-score-row">
         <div class="score-block"><span class="label">Total</span><span class="value">${country.total}</span></div>
-        <div class="score-block"><span class="label">Safety</span><span class="value">${country.safety}</span></div>
+        <div class="score-block"><span class="label">Family</span><span class="value">${country.familyStability}</span></div>
         <div class="score-block"><span class="label">Housing</span><span class="value">${country.affordability}</span></div>
-        <div class="score-block"><span class="label">Lifestyle</span><span class="value">${country.familyComfort}</span></div>
+        <div class="score-block"><span class="label">Upside</span><span class="value">${country.wealthUpside}</span></div>
       </div>
     </article>
   `).join('');
 
-  const recommendation = document.getElementById('location-recommendation');
-  recommendation.innerHTML = '';
-  const best = engine.locationScores[0];
-  recommendation.appendChild(noteCard({
-    title: `${best.name} leads in the current seeded model`,
-    detail: `This result is driven by a balance of safety, family comfort, and wealth upside rather than just salary potential. Use it as a working hypothesis to test, not a final answer.`
-  }, 'Current leader'));
-  recommendation.appendChild(noteCard({
-    title: 'Best raw upside is not automatically the best destination',
-    detail: 'The model intentionally penalizes countries that create too much housing and family friction relative to the income upside.'
-  }, 'Interpretation'));
+  E.locationRecommendation.innerHTML = '';
+  E.locationRecommendation.appendChild(noteCard({ title: `${engine.topCountry.name} leads the current weighted model`, detail: `Lead is driven by balanced family stability and upside. Housing stress penalty applied: ${engine.topCountry.housingStressPenalty}.` }, 'Current leader'));
+  E.locationRecommendation.appendChild(noteCard({ title: 'Belgium / France / US are always retained as anchors', detail: 'Two optional countries are for scenario testing, not replacing baseline references.' }, 'Model rule'));
 }
 
-function renderCareer(stateRef) {
-  renderStack('career-lanes', stateRef.careerLanes, item => noteCard({ title: item.title, detail: `${item.action} Payoff: ${item.payoff}.` }, `Fit ${item.fit}`));
+function renderCareer() {
+  renderStack(E.careerLanes, state.careerLanes, (item) => noteCard({ title: item.title, detail: `${item.action} Payoff: ${item.payoff}.` }, `Fit ${item.fit}`));
 
   const watchlist = [
-    {
-      title: 'INTERPOL vacancies / secondments',
-      detail: 'Official careers and secondment pages. Best for law-enforcement-aligned analyst pathways.',
-      url: 'https://www.interpol.int/What-you-can-do/Careers/Vacancies'
-    },
-    {
-      title: 'ReliefWeb jobs',
-      detail: 'Free global jobs and consultancy source for humanitarian, development, environment, and some conservation-adjacent roles.',
-      url: 'https://reliefweb.int/jobs'
-    },
-    {
-      title: 'EU Careers / Europol',
-      detail: 'Useful for analyst, policy, security, and Brussels-based institutional pathways.',
-      url: 'https://eu-careers.europa.eu/'
-    },
-    {
-      title: 'UN Careers / UNEP / UNODC',
-      detail: 'Relevant for international roles linked to environment, crime, policy, and analysis.',
-      url: 'https://careers.un.org/'
-    },
-    {
-      title: 'IUCN roles',
-      detail: 'Conservation and consultancy monitoring target. Good match for your domain expertise.',
-      url: 'https://www.iucn.org/'
-    },
+    { title: 'INTERPOL vacancies', detail: 'Official global enforcement openings.', url: 'https://www.interpol.int/What-you-can-do/Careers/Vacancies' },
+    { title: 'ReliefWeb jobs', detail: 'International jobs + consultancies feed.', url: 'https://reliefweb.int/jobs' },
+    { title: 'EU Careers / Europol', detail: 'Brussels and EU institutional pathways.', url: 'https://eu-careers.europa.eu/' },
+    { title: 'UN Careers', detail: 'UNEP, UNODC, policy and analysis roles.', url: 'https://careers.un.org/' },
   ];
 
-  const container = document.getElementById('job-watchlist');
-  container.innerHTML = watchlist.map(item => `
-    <article class="note-card">
-      <h4><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a></h4>
-      <p>${item.detail}</p>
-    </article>
-  `).join('');
+  E.jobWatchlist.innerHTML = watchlist.map((item) => `<article class="note-card"><h4><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a></h4><p>${item.detail}</p></article>`).join('');
 }
 
-function renderFamily(engine, briefing, stateRef) {
-  document.getElementById('runway-months').textContent = `${round(engine.runway)} mo`;
-  document.getElementById('spouse-potential').textContent = engine.spousePotential;
-  document.getElementById('family-score').textContent = engine.familyScore;
+function renderFamily(engine, briefing) {
+  E.runwayMonths.textContent = `${round(engine.runway)} mo`;
+  E.spousePotential.textContent = engine.spousePotential;
+  E.familyScore.textContent = engine.familyScore;
 
-  renderStack('spouse-income-paths', stateRef.spouseIncomePaths, item => noteCard({ title: item.title, detail: `${item.why} Ramp: ${item.ramp}.` }, `Fit ${item.fit}`));
-  renderStack('family-recommendations', briefing.familyRecs, item => noteCard(item, 'Family'));
+  renderStack(E.spouseIncomePaths, state.spouseIncomePaths, (item) => noteCard({ title: item.title, detail: `${item.why} Ramp: ${item.ramp}.` }, `Fit ${item.fit}`));
+  renderStack(E.familyRecommendations, briefing.familyRecs, (item) => noteCard(item, 'Family'));
+
+  E.weekendPolicy.innerHTML = '';
+  E.weekendPolicy.appendChild(noteCard({ title: engine.weekendProtection < 45 ? 'Strict weekend recovery mode' : 'Managed weekend execution mode', detail: engine.weekendProtection < 45 ? 'Only low-cognitive tasks allowed. Max one strategic block per day.' : 'One bounded strategic block allowed, followed by full recovery time.' }, 'Protection logic'));
+  E.weekendPolicy.appendChild(noteCard({ title: 'Why this exists', detail: 'Sustained weekend overload degrades career performance, partner support, and decision quality over the week.' }, 'Reasoning'));
 }
 
-function renderSignals(stateRef) {
-  const weatherContainer = document.getElementById('weather-signal');
-  const hazardContainer = document.getElementById('hazard-signal');
-  const techContainer = document.getElementById('tech-signal');
-
-  weatherContainer.innerHTML = '';
-  if (stateRef.signals.weather) {
-    weatherContainer.appendChild(noteCard({
-      title: `${stateRef.signals.weather.city}`,
-      detail: `${stateRef.signals.weather.summary} | ${stateRef.signals.weather.temp}°C | Wind ${stateRef.signals.weather.wind} km/h`
-    }, 'Open-Meteo'));
-  } else {
-    weatherContainer.innerHTML = '<p class="empty-state">Click “Load live signals” to pull current weather data.</p>';
-  }
-
-  if (stateRef.signals.hazards.length) {
-    renderStack('hazard-signal', stateRef.signals.hazards, item => noteCard({ title: item.title, detail: item.detail }, 'NASA EONET'));
-  } else {
-    hazardContainer.innerHTML = '<p class="empty-state">No live hazard feed loaded yet.</p>';
-  }
-
-  if (stateRef.signals.tech.length) {
-    renderStack('tech-signal', stateRef.signals.tech, item => noteCard({ title: item.title, detail: item.detail }, 'Hacker News'));
-  } else {
-    techContainer.innerHTML = '<p class="empty-state">No live tech signal loaded yet.</p>';
-  }
-
-  const connectorGrid = document.getElementById('connector-status');
-  connectorGrid.innerHTML = stateRef.connectors.map(item => `
-    <article class="connector-card">
-      <h4>${item.name}</h4>
-      <p>${item.type}</p>
-      <p>${item.note}</p>
-      <span class="status ${item.status === 'live' ? 'status-live' : item.status === 'mock' ? 'status-mock' : 'status-planned'}">${item.status}</span>
-    </article>
-  `).join('');
+function renderOpportunityRadar(briefing, engine) {
+  renderStack(E.opportunityRadar, briefing.opportunityRadar, (item) => noteCard({ title: item.title, detail: item.detail }, item.kicker));
+  E.opportunitySummary.innerHTML = '';
+  E.opportunitySummary.appendChild(noteCard({ title: `Opportunity concentration score: ${engine.opportunityScore}/100`, detail: 'Concentration is intentional: fewer high-fit bets usually outperform many low-fit bets.' }, 'Signal'));
 }
 
-function renderSettings(stateRef) {
-  const form = document.getElementById('settings-form');
-  Object.entries(stateRef.profile).forEach(([key, value]) => {
-    const input = form.elements.namedItem(key);
+function renderSignals() {
+  E.weatherSignal.innerHTML = state.signals.weather
+    ? ''
+    : '<p class="empty-state">Click “Load live signals” to pull current weather data.</p>';
+  if (state.signals.weather) E.weatherSignal.appendChild(noteCard({ title: state.signals.weather.city, detail: `${state.signals.weather.summary} | ${state.signals.weather.temp}°C | Wind ${state.signals.weather.wind} km/h` }, 'Open-Meteo'));
+
+  if (state.signals.hazards.length) renderStack(E.hazardSignal, state.signals.hazards, (item) => noteCard(item, 'NASA EONET'));
+  else E.hazardSignal.innerHTML = '<p class="empty-state">No live hazard feed loaded yet.</p>';
+
+  if (state.signals.tech.length) renderStack(E.techSignal, state.signals.tech, (item) => noteCard(item, 'Hacker News'));
+  else E.techSignal.innerHTML = '<p class="empty-state">No live tech signal loaded yet.</p>';
+
+  E.connectorStatus.innerHTML = state.connectors.map((item) => `<article class="connector-card"><h4>${item.name}</h4><p>${item.type}</p><p>${item.note}</p><span class="status ${item.status === 'live' ? 'status-live' : item.status === 'mock' ? 'status-mock' : 'status-planned'}">${item.status}</span></article>`).join('');
+}
+
+function renderSettings() {
+  Object.entries(state.profile).forEach(([key, value]) => {
+    const input = E.settingsForm.elements.namedItem(key);
     if (input) input.value = value;
   });
 
-  const container = document.getElementById('weight-controls');
-  container.innerHTML = '';
-  Object.entries(stateRef.weights).forEach(([key, value]) => {
+  E.weightControls.innerHTML = '';
+  Object.entries(state.weights).forEach(([key, value]) => {
     const wrapper = document.createElement('div');
     wrapper.className = 'weight-row';
-    wrapper.innerHTML = `
-      <label>${key.charAt(0).toUpperCase() + key.slice(1)} weight: <span id="weight-value-${key}">${value}</span>%</label>
-      <input type="range" min="0" max="100" step="1" value="${value}" data-weight="${key}" />
-    `;
-    container.appendChild(wrapper);
+    wrapper.innerHTML = `<label>${key.charAt(0).toUpperCase() + key.slice(1)} weight: <span id="weight-value-${key}">${value}</span>%</label><input type="range" min="0" max="100" step="1" value="${value}" data-weight="${key}" />`;
+    E.weightControls.appendChild(wrapper);
   });
 
-  container.querySelectorAll('input[type="range"]').forEach(input => {
+  E.weightControls.querySelectorAll('input[type="range"]').forEach((input) => {
     input.addEventListener('input', (event) => {
-      const weightKey = event.target.dataset.weight;
-      const nextValue = Number(event.target.value);
-      state.weights[weightKey] = nextValue;
-      document.getElementById(`weight-value-${weightKey}`).textContent = nextValue;
+      const key = event.target.dataset.weight;
+      const value = Number(event.target.value);
+      state.weights[key] = value;
+      document.getElementById(`weight-value-${key}`).textContent = value;
       saveState();
       renderAll();
     });
   });
+
+  const optionalIds = Object.keys(COUNTRY_LIBRARY).filter((id) => !['belgium', 'france', 'united-states'].includes(id));
+  [E.comparisonCountry1, E.comparisonCountry2].forEach((select, index) => {
+    select.innerHTML = optionalIds.map((id) => `<option value="${id}">${COUNTRY_LIBRARY[id].name}</option>`).join('');
+    select.value = state.comparisonCountryIds[index] || optionalIds[index] || 'netherlands';
+  });
+
+  E.persistenceStamp.textContent = state.meta.lastSavedAt ? `Last saved: ${new Date(state.meta.lastSavedAt).toLocaleString()}` : 'No local save timestamp yet.';
 }
 
 function renderAll() {
   const engine = computeEngine(state);
   const briefing = generateBriefing(state, engine);
-  renderOverview(engine, briefing);
+  const changeItems = computeChanges(engine, state.meta.lastEngine);
+
+  renderOverview(engine, briefing, changeItems);
   renderHorizons(briefing);
   renderWealth(engine, briefing);
-  renderLocations(engine);
-  renderCareer(state);
-  renderFamily(engine, briefing, state);
-  renderSignals(state);
-  renderSettings(state);
-  document.getElementById('date-stamp').textContent = new Date().toLocaleDateString();
+  renderLocation(engine);
+  renderCareer();
+  renderFamily(engine, briefing);
+  renderOpportunityRadar(briefing, engine);
+  renderSignals();
+  renderSettings();
+
+  E.dateStamp.textContent = new Date().toLocaleDateString();
+  state.meta.lastEngine = {
+    wealthScore: engine.wealthScore,
+    resilienceScore: engine.resilienceScore,
+    careerLeverageScore: engine.careerLeverageScore,
+    familyScore: engine.familyScore,
+    compositeScore: engine.compositeScore,
+  };
+  saveState();
 }
 
 function setupNavigation() {
   const navButtons = document.querySelectorAll('.nav-btn');
-  navButtons.forEach(button => {
+  navButtons.forEach((button) => {
     button.addEventListener('click', () => {
-      navButtons.forEach(btn => btn.classList.remove('active'));
+      navButtons.forEach((btn) => btn.classList.remove('active'));
       button.classList.add('active');
-      const sectionId = button.dataset.section;
-      document.querySelectorAll('.section').forEach(section => section.classList.remove('visible'));
-      document.getElementById(sectionId).classList.add('visible');
-      document.getElementById('section-title').textContent = button.textContent;
+      document.querySelectorAll('.section').forEach((section) => section.classList.remove('visible'));
+      document.getElementById(button.dataset.section).classList.add('visible');
+      E.sectionTitle.textContent = button.textContent;
     });
   });
 }
 
 function setupForms() {
-  const form = document.getElementById('settings-form');
-  form.addEventListener('submit', (event) => {
+  E.settingsForm.addEventListener('submit', (event) => {
     event.preventDefault();
-    const formData = new FormData(form);
-    Object.keys(state.profile).forEach(key => {
-      const value = formData.get(key);
-      state.profile[key] = Number(value);
+    const formData = new FormData(E.settingsForm);
+    Object.keys(state.profile).forEach((key) => {
+      state.profile[key] = Number(formData.get(key));
     });
+    state.comparisonCountryIds = [E.comparisonCountry1.value, E.comparisonCountry2.value].filter((value, index, arr) => value && arr.indexOf(value) === index).slice(0, 2);
     saveState();
     renderAll();
   });
 
-  document.getElementById('reset-defaults').addEventListener('click', () => {
-    state = clone(DEFAULT_STATE);
+  E.resetDefaults.addEventListener('click', () => {
+    state = hydrateState({});
     saveState();
     renderAll();
   });
 
-  document.getElementById('export-state').addEventListener('click', () => {
+  E.exportState.addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -907,18 +646,12 @@ function setupForms() {
     URL.revokeObjectURL(url);
   });
 
-  document.getElementById('import-state').addEventListener('change', async (event) => {
+  E.importState.addEventListener('change', async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      state = {
-        ...clone(DEFAULT_STATE),
-        ...parsed,
-        profile: { ...clone(DEFAULT_STATE.profile), ...(parsed.profile || {}) },
-        weights: { ...clone(DEFAULT_STATE.weights), ...(parsed.weights || {}) },
-      };
+      const parsed = JSON.parse(await file.text());
+      state = hydrateState(parsed);
       saveState();
       renderAll();
       alert('Dashboard state imported.');
@@ -929,69 +662,41 @@ function setupForms() {
   });
 }
 
-function setupRefreshActions() {
-  document.getElementById('refresh-briefing').addEventListener('click', () => {
-    renderAll();
-  });
-
-  document.getElementById('load-live-signals').addEventListener('click', loadLiveSignals);
+function setupActions() {
+  E.refreshBriefing.addEventListener('click', () => renderAll());
+  E.loadLiveSignals.addEventListener('click', loadLiveSignals);
 }
 
 function weatherCodeToText(code) {
-  const map = {
-    0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Rime fog',
-    51: 'Light drizzle', 53: 'Drizzle', 55: 'Dense drizzle', 61: 'Light rain', 63: 'Rain', 65: 'Heavy rain',
-    71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 80: 'Rain showers', 81: 'Showers', 82: 'Heavy showers',
-    95: 'Thunderstorm', 96: 'Thunderstorm with hail', 99: 'Severe thunderstorm with hail'
-  };
+  const map = { 0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Rime fog', 51: 'Light drizzle', 53: 'Drizzle', 55: 'Dense drizzle', 61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 80: 'Rain showers', 81: 'Showers', 82: 'Heavy showers', 95: 'Thunderstorm', 96: 'Thunderstorm with hail', 99: 'Severe thunderstorm with hail' };
   return map[code] || 'Mixed conditions';
 }
 
 async function loadLiveSignals() {
-  const loadButton = document.getElementById('load-live-signals');
-  const original = loadButton.textContent;
-  loadButton.textContent = 'Loading...';
-  loadButton.disabled = true;
+  const original = E.loadLiveSignals.textContent;
+  E.loadLiveSignals.textContent = 'Loading...';
+  E.loadLiveSignals.disabled = true;
 
   try {
     const weatherPromise = fetch('https://api.open-meteo.com/v1/forecast?latitude=50.85&longitude=4.35&current=temperature_2m,weather_code,wind_speed_10m&timezone=Europe%2FBerlin')
-      .then(res => {
-        if (!res.ok) throw new Error('Weather request failed');
-        return res.json();
-      })
-      .then(data => ({
-        city: 'Brussels',
-        temp: Math.round(data.current.temperature_2m),
-        wind: Math.round(data.current.wind_speed_10m),
-        summary: weatherCodeToText(data.current.weather_code),
-      }));
+      .then((res) => { if (!res.ok) throw new Error('Weather request failed'); return res.json(); })
+      .then((data) => ({ city: 'Brussels', temp: round(data.current.temperature_2m), wind: round(data.current.wind_speed_10m), summary: weatherCodeToText(data.current.weather_code) }));
 
     const hazardPromise = fetch('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=5')
-      .then(res => {
-        if (!res.ok) throw new Error('Hazard request failed');
-        return res.json();
-      })
-      .then(data => (data.events || []).map(event => ({
+      .then((res) => { if (!res.ok) throw new Error('Hazard request failed'); return res.json(); })
+      .then((data) => (data.events || []).map((event) => ({
         title: event.title,
-        detail: `${event.categories?.map(c => c.title).join(', ') || 'Event'} | ${event.geometry?.[0]?.date ? new Date(event.geometry[0].date).toLocaleDateString() : 'Recent'}`,
+        detail: `${event.categories?.map((c) => c.title).join(', ') || 'Event'} | ${event.geometry?.[0]?.date ? new Date(event.geometry[0].date).toLocaleDateString() : 'Recent'}`,
       })));
 
     const techPromise = fetch('https://hacker-news.firebaseio.com/v0/topstories.json')
-      .then(res => {
-        if (!res.ok) throw new Error('HN request failed');
-        return res.json();
-      })
-      .then(async ids => {
-        const sampleIds = ids.slice(0, 5);
-        const stories = await Promise.all(sampleIds.map(id => fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(res => res.json())));
-        return stories.filter(Boolean).map(story => ({
-          title: story.title,
-          detail: `Score ${story.score || 0} | ${story.by || 'unknown'} | ${story.url || 'news.ycombinator.com'}`,
-        }));
+      .then((res) => { if (!res.ok) throw new Error('HN request failed'); return res.json(); })
+      .then(async (ids) => {
+        const stories = await Promise.all(ids.slice(0, 5).map((id) => fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then((res) => res.json())));
+        return stories.filter(Boolean).map((story) => ({ title: story.title, detail: `Score ${story.score || 0} | ${story.by || 'unknown'} | ${story.url || 'news.ycombinator.com'}` }));
       });
 
     const [weatherResult, hazardResult, techResult] = await Promise.allSettled([weatherPromise, hazardPromise, techPromise]);
-
     if (weatherResult.status === 'fulfilled') state.signals.weather = weatherResult.value;
     if (hazardResult.status === 'fulfilled') state.signals.hazards = hazardResult.value;
     if (techResult.status === 'fulfilled') state.signals.tech = techResult.value;
@@ -1001,17 +706,87 @@ async function loadLiveSignals() {
     renderAll();
   } catch (error) {
     console.error(error);
-    alert('Some live signals failed to load. The dashboard will continue using existing data.');
+    alert('Some live signals failed to load. Existing data was preserved.');
   } finally {
-    loadButton.textContent = original;
-    loadButton.disabled = false;
+    E.loadLiveSignals.textContent = original;
+    E.loadLiveSignals.disabled = false;
   }
 }
 
+function cacheElements() {
+  Object.assign(E, {
+    sectionTitle: document.getElementById('section-title'),
+    dateStamp: document.getElementById('date-stamp'),
+    refreshBriefing: document.getElementById('refresh-briefing'),
+    loadLiveSignals: document.getElementById('load-live-signals'),
+    exportState: document.getElementById('export-state'),
+
+    primaryDirectiveTitle: document.getElementById('primary-directive-title'),
+    primaryDirectiveText: document.getElementById('primary-directive-text'),
+    directiveTags: document.getElementById('directive-tags'),
+    compositeScore: document.getElementById('composite-score'),
+    compositeScoreRing: document.getElementById('composite-score-ring'),
+    wealthScore: document.getElementById('wealth-score'),
+    resilienceScore: document.getElementById('resilience-score'),
+    locationScore: document.getElementById('location-score'),
+    careerScore: document.getElementById('career-score'),
+    weekendProtectionScore: document.getElementById('weekend-protection-score'),
+
+    todayActions: document.getElementById('today-actions'),
+    whyNow: document.getElementById('why-now'),
+    whatChanged: document.getElementById('what-changed'),
+    threatList: document.getElementById('threat-list'),
+    opportunityLanes: document.getElementById('opportunity-lanes'),
+    checkpointList: document.getElementById('checkpoint-list'),
+
+    horizonTimeline: document.getElementById('horizon-timeline'),
+    strategyNarrative: document.getElementById('strategy-narrative'),
+
+    monthlySurplus: document.getElementById('monthly-surplus'),
+    houseFundProjection: document.getElementById('house-fund-projection'),
+    tenYearAssets: document.getElementById('ten-year-assets'),
+    surplusMeter: document.getElementById('surplus-meter'),
+    houseMeter: document.getElementById('house-meter'),
+    assetMeter: document.getElementById('asset-meter'),
+    capitalAllocation: document.getElementById('capital-allocation'),
+    wealthRecommendations: document.getElementById('wealth-recommendations'),
+
+    countryComparison: document.getElementById('country-comparison'),
+    locationRecommendation: document.getElementById('location-recommendation'),
+
+    careerLanes: document.getElementById('career-lanes'),
+    jobWatchlist: document.getElementById('job-watchlist'),
+
+    runwayMonths: document.getElementById('runway-months'),
+    spousePotential: document.getElementById('spouse-potential'),
+    familyScore: document.getElementById('family-score'),
+    spouseIncomePaths: document.getElementById('spouse-income-paths'),
+    familyRecommendations: document.getElementById('family-recommendations'),
+    weekendPolicy: document.getElementById('weekend-policy'),
+
+    opportunityRadar: document.getElementById('opportunity-radar-list'),
+    opportunitySummary: document.getElementById('opportunity-summary'),
+
+    weatherSignal: document.getElementById('weather-signal'),
+    hazardSignal: document.getElementById('hazard-signal'),
+    techSignal: document.getElementById('tech-signal'),
+    connectorStatus: document.getElementById('connector-status'),
+
+    settingsForm: document.getElementById('settings-form'),
+    resetDefaults: document.getElementById('reset-defaults'),
+    importState: document.getElementById('import-state'),
+    weightControls: document.getElementById('weight-controls'),
+    comparisonCountry1: document.getElementById('comparison-country-1'),
+    comparisonCountry2: document.getElementById('comparison-country-2'),
+    persistenceStamp: document.getElementById('persistence-stamp'),
+  });
+}
+
 function init() {
+  cacheElements();
   setupNavigation();
   setupForms();
-  setupRefreshActions();
+  setupActions();
   renderAll();
 }
 
