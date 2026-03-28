@@ -28,6 +28,7 @@
         <button class="nav-btn" data-section="location-radar">Location Radar</button>
         <button class="nav-btn" data-section="career-watch">Career Watch</button>
         <button class="nav-btn" data-section="family-readiness">Family Readiness</button>
+        <button class="nav-btn" data-section="opportunity-radar">Opportunity Radar</button>
         <button class="nav-btn" data-section="signals">Signals</button>
         <button class="nav-btn" data-section="settings">Settings</button>
       </nav>
@@ -80,7 +81,7 @@
             <div class="card metric-card">
               <p class="eyebrow">Household resilience</p>
               <p class="metric-value" id="resilience-score">0</p>
-              <p class="muted">Emergency runway, one-income pressure, child planning buffer.</p>
+              <p class="muted">Emergency runway, one-income pressure, child-planning buffer.</p>
             </div>
             <div class="card metric-card">
               <p class="eyebrow">Location viability</p>
@@ -90,30 +91,28 @@
             <div class="card metric-card">
               <p class="eyebrow">Career leverage</p>
               <p class="metric-value" id="career-score">0</p>
-              <p class="muted">Fit between your expertise and monetizable roles or offerings.</p>
+              <p class="muted">Fit between expertise and monetizable opportunities.</p>
+            </div>
+            <div class="card metric-card full-grid">
+              <p class="eyebrow">Weekend protection</p>
+              <p class="metric-value" id="weekend-protection-score">0</p>
+              <p class="muted">Shows how strongly the engine should throttle weekend workload.</p>
             </div>
           </div>
         </div>
 
-        <div class="grid two-col mt-lg">
+        <div class="grid three-col mt-lg">
           <div class="card">
-            <div class="card-header">
-              <div>
-                <p class="eyebrow">Today</p>
-                <h3>Top 3 actions</h3>
-              </div>
-            </div>
+            <div class="card-header"><h3>Top 3 actions</h3></div>
             <div id="today-actions" class="stack"></div>
           </div>
-
           <div class="card">
-            <div class="card-header">
-              <div>
-                <p class="eyebrow">Week signal</p>
-                <h3>Why now</h3>
-              </div>
-            </div>
+            <div class="card-header"><h3>Why now</h3></div>
             <div id="why-now" class="stack compact"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>What changed</h3></div>
+            <div id="what-changed" class="stack compact"></div>
           </div>
         </div>
 
@@ -252,7 +251,7 @@
           <div class="card metric-card tall">
             <p class="eyebrow">Family comfort score</p>
             <p class="metric-value" id="family-score">0</p>
-            <p class="muted">Blends safety, housing pressure, healthcare, and bandwidth realism.</p>
+            <p class="muted">Blends stability, housing pressure, and bandwidth realism.</p>
           </div>
         </div>
 
@@ -264,6 +263,24 @@
           <div class="card">
             <div class="card-header"><h3>Family preparation recommendations</h3></div>
             <div id="family-recommendations" class="stack"></div>
+          </div>
+        </div>
+
+        <div class="card mt-lg">
+          <div class="card-header"><h3>Weekend protection logic</h3></div>
+          <div id="weekend-policy" class="stack"></div>
+        </div>
+      </section>
+
+      <section id="opportunity-radar" class="section">
+        <div class="grid two-col">
+          <div class="card">
+            <div class="card-header"><h3>Opportunity radar</h3></div>
+            <div id="opportunity-radar-list" class="stack"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Radar interpretation</h3></div>
+            <div id="opportunity-summary" class="stack"></div>
           </div>
         </div>
       </section>
@@ -315,54 +332,26 @@
           <div class="card">
             <div class="card-header"><h3>Profile and finance</h3></div>
             <form id="settings-form" class="form-grid">
-              <label>
-                Net monthly income (€)
-                <input type="number" step="50" name="netIncome" />
+              <label>Net monthly income (€)<input type="number" step="50" name="netIncome" /></label>
+              <label>Cash savings (€)<input type="number" step="100" name="cashSavings" /></label>
+              <label>Long-term investments (€)<input type="number" step="100" name="investments" /></label>
+              <label>Monthly essential costs (€)<input type="number" step="50" name="essentialCosts" /></label>
+              <label>Monthly strategic spending (€)<input type="number" step="50" name="strategicSpending" /></label>
+              <label>Weekly work hours<input type="number" step="1" name="weeklyHours" /></label>
+              <label>Home goal horizon (years)<input type="number" step="1" name="homeGoalYears" /></label>
+              <label>Target house fund (€)<input type="number" step="1000" name="targetHouseFund" /></label>
+              <label>Weekend burnout (0-100)<input type="number" step="1" min="0" max="100" name="weekendBurnout" /></label>
+              <label>Expected annual return (%)<input type="number" step="0.5" name="expectedReturnPct" /></label>
+              <label>Spouse remote income target (€ / month)<input type="number" step="50" name="spouseIncomeTarget" /></label>
+              <label>Side income target (€ / month)<input type="number" step="50" name="sideIncomeTarget" /></label>
+
+              <label>Optional country 1
+                <select id="comparison-country-1"></select>
               </label>
-              <label>
-                Cash savings (€)
-                <input type="number" step="100" name="cashSavings" />
+              <label>Optional country 2
+                <select id="comparison-country-2"></select>
               </label>
-              <label>
-                Long-term investments (€)
-                <input type="number" step="100" name="investments" />
-              </label>
-              <label>
-                Monthly essential costs (€)
-                <input type="number" step="50" name="essentialCosts" />
-              </label>
-              <label>
-                Monthly strategic spending (€)
-                <input type="number" step="50" name="strategicSpending" />
-              </label>
-              <label>
-                Weekly work hours
-                <input type="number" step="1" name="weeklyHours" />
-              </label>
-              <label>
-                Home goal horizon (years)
-                <input type="number" step="1" name="homeGoalYears" />
-              </label>
-              <label>
-                Target house fund (€)
-                <input type="number" step="1000" name="targetHouseFund" />
-              </label>
-              <label>
-                Weekend burnout (0-100)
-                <input type="number" step="1" min="0" max="100" name="weekendBurnout" />
-              </label>
-              <label>
-                Expected annual return (%)
-                <input type="number" step="0.5" name="expectedReturnPct" />
-              </label>
-              <label>
-                Spouse remote income target (€ / month)
-                <input type="number" step="50" name="spouseIncomeTarget" />
-              </label>
-              <label>
-                Side income target (€ / month)
-                <input type="number" step="50" name="sideIncomeTarget" />
-              </label>
+
               <div class="form-actions full-width">
                 <button class="btn btn-primary" type="submit">Save settings</button>
                 <button class="btn btn-secondary" type="button" id="reset-defaults">Reset defaults</button>
@@ -374,10 +363,8 @@
             <div class="card-header"><h3>Weighting controls</h3></div>
             <div id="weight-controls" class="weight-stack"></div>
             <div class="card-header mt-lg"><h3>Import state</h3></div>
-            <label class="file-label">
-              Upload exported dashboard JSON
-              <input type="file" id="import-state" accept="application/json" />
-            </label>
+            <label class="file-label">Upload exported dashboard JSON<input type="file" id="import-state" accept="application/json" /></label>
+            <p id="persistence-stamp" class="muted small"></p>
             <p class="muted small">All data is stored locally in your browser for this static prototype.</p>
           </div>
         </div>
