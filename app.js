@@ -341,6 +341,114 @@ function getRelevantJobs(stateRef) {
     .slice(0, 10);
 }
 
+function computeDrivers(engine, signals, profile) {
+  const now = Date.now();
+  const staleHours = signals.lastUpdated
+    ? (now - new Date(signals.lastUpdated).getTime()) / (1000 * 60 * 60)
+    : null;
+  const relevantJobs = (signals.relevantJobs || [])
+    .filter((job) => typeof job.relevance === 'number')
+    .sort((a, b) => b.relevance - a.relevance);
+  const freshRelevantJobs = relevantJobs.filter((job) => {
+    if (!job.postedAt) return false;
+    return now - new Date(job.postedAt).getTime() <= 24 * 60 * 60 * 1000;
+  });
+
+  const liquidityGap = clamp((12 - engine.runway) / 12, 0, 1);
+  const careerGap = clamp((75 - engine.careerLeverageScore) / 75, 0, 1);
+  const energyGap = clamp((65 - engine.weekendProtection) / 65, 0, 1);
+  const feedGap = staleHours === null ? 1 : clamp((staleHours - 12) / 36, 0, 1);
+
+  return [
+    {
+      key: 'liquidity',
+      weight: round((liquidityGap * 0.72 + (engine.investableSurplus > 0 ? 0.18 : 0.42)) * 100),
+      title: 'Protect family runway before acceleration',
+      action: 'Preserve a 12-month cash floor and only increase investments when surplus remains positive.',
+      expectedImpact: 'Lower downside risk while keeping house-fund progress steady.',
+      urgency: engine.runway < 10 ? 'High' : 'Medium',
+      confidence: engine.runway < 10 ? 88 : 74,
+      whatChanged: `Runway now ${engine.runway.toFixed(1)} months with ${euros(engine.investableSurplus)} monthly surplus.`,
+      whyNow: engine.runway < 12 ? 'A low runway can force reactive decisions during family volatility.' : 'Runway is adequate, but preserving buffer prevents backsliding.',
+      because: [
+        `Runway is ${engine.runway.toFixed(1)} months.`,
+        `Monthly investable surplus is ${euros(engine.investableSurplus)}.`,
+        `Family readiness score is ${engine.familyScore}/100.`,
+      ],
+      reviewAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      key: 'career',
+      weight: round((careerGap * 0.56 + Math.min(relevantJobs.length / 8, 0.44)) * 100),
+      title: 'Convert live market demand into targeted applications',
+      action: 'Ship one tailored application or outreach to the highest-fit role today.',
+      expectedImpact: 'Faster compensation growth and improved career leverage score.',
+      urgency: freshRelevantJobs.length >= 2 ? 'High' : 'Medium',
+      confidence: relevantJobs.length ? 82 : 61,
+      whatChanged: `${relevantJobs.length} relevant jobs in feed, ${freshRelevantJobs.length} posted in the last 24h.`,
+      whyNow: relevantJobs.length ? 'Live openings decay quickly; acting in the first day raises response odds.' : 'No validated opportunities yet, so refreshing signals is the bottleneck.',
+      because: [
+        `${relevantJobs.length} high-fit jobs matched your lanes.`,
+        `${freshRelevantJobs.length} high-fit jobs were posted in the last 24h.`,
+        `Career leverage score is ${engine.careerLeverageScore}/100.`,
+      ],
+      expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      key: 'energy',
+      weight: round((energyGap * 0.78 + clamp(profile.weekendBurnout / 100, 0, 1) * 0.22) * 100),
+      title: 'Throttle weekend workload to prevent execution decay',
+      action: 'Keep weekends to low-cognitive maintenance tasks plus one bounded strategic block.',
+      expectedImpact: 'Higher consistency and lower burnout-driven drop-offs.',
+      urgency: profile.weekendBurnout >= 70 ? 'High' : 'Medium',
+      confidence: 86,
+      whatChanged: `Weekend burnout is ${profile.weekendBurnout}/100 and protection score is ${engine.weekendProtection}/100.`,
+      whyNow: profile.weekendBurnout >= 70 ? 'Recovery debt compounds quickly and can erase weekday output quality.' : 'Energy is manageable now; guardrails keep it that way.',
+      because: [
+        `Weekend burnout is ${profile.weekendBurnout}/100.`,
+        `Weekend protection score is ${engine.weekendProtection}/100.`,
+        `Weekly hours are set to ${profile.weeklyHours}h.`,
+      ],
+      reviewAt: new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      key: 'signal-freshness',
+      weight: round(feedGap * 100),
+      title: 'Refresh live feeds before making irreversible decisions',
+      action: 'Run "Load live signals" and re-rank opportunities before next major commitment.',
+      expectedImpact: 'Prevents stale-data bias in job and investment choices.',
+      urgency: staleHours === null || staleHours >= 24 ? 'High' : 'Low',
+      confidence: staleHours === null ? 58 : 72,
+      whatChanged: staleHours === null ? 'No live signal refresh has been recorded yet.' : `Last refresh was ${round(staleHours)}h ago.`,
+      whyNow: staleHours === null || staleHours >= 24 ? 'Signal quality has likely drifted beyond a reliable decision window.' : 'Feed is still reasonably fresh but should be checked before critical moves.',
+      because: [
+        staleHours === null ? 'Signals were never refreshed.' : `Last live refresh was ${round(staleHours)} hours ago.`,
+        `${signals.jobs.length} jobs and ${signals.investments.length} investment signals are currently loaded.`,
+      ],
+      reviewAt: new Date(now + 12 * 60 * 60 * 1000).toISOString(),
+    },
+  ];
+}
+
+function rankRecommendations(drivers) {
+  return clone(drivers)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 3)
+    .map((driver) => ({
+      title: driver.title,
+      action: driver.action,
+      description: driver.action,
+      expectedImpact: driver.expectedImpact,
+      urgency: driver.urgency,
+      confidence: `${driver.confidence}%`,
+      because: driver.because,
+      whatChanged: driver.whatChanged,
+      whyNow: driver.whyNow,
+      expiresAt: driver.expiresAt || null,
+      reviewAt: driver.reviewAt || null,
+    }));
+}
+
 function generateBriefing(stateRef, engine) {
   const topOpps = clone(stateRef.opportunities)
     .sort((a, b) => (b.fit * 0.58 + b.upside * 0.42) - (a.fit * 0.58 + a.upside * 0.42));
@@ -358,21 +466,11 @@ function generateBriefing(stateRef, engine) {
   const staleHours = stateRef.signals.lastUpdated
     ? round((Date.now() - new Date(stateRef.signals.lastUpdated).getTime()) / (1000 * 60 * 60))
     : null;
+  const drivers = computeDrivers(engine, { ...stateRef.signals, relevantJobs }, stateRef.profile);
+  const rankedRecommendations = rankRecommendations(drivers);
 
   return {
-    today: [
-      { title: 'Ship one high-value output in your strongest lane', meta: 'Income leverage | Expertise-first', description: `Prioritize ${topOpps[0].title.toLowerCase()} and complete one concrete output (proposal, brief, or targeted application).`, payoff: 'High leverage', risk: 'Low risk', time: '45-60 min', confidence: 'High' },
-      {
-        title: liveJob ? `Apply or outreach to this live role: ${liveJob.title}` : 'No live role captured yet: run manual job scan now',
-        meta: 'Career watch | Live feed',
-        description: liveJob ? `${liveJob.detail}. Use this as your first concrete career action today.` : 'Trigger “Load live signals” and shortlist one role with clear fit before ending the day.',
-        payoff: 'Career acceleration',
-        risk: 'Low risk',
-        time: '20-30 min',
-        confidence: liveJob ? 'High' : 'Medium',
-      },
-      { title: weekendMode ? 'Weekend protection ON: run low-cognitive tasks only' : 'Weekend protection OFF: one medium push is allowed', meta: 'Energy protocol', description: weekendMode ? 'Burnout is elevated, so this engine is protecting recovery. Keep weekend execution to admin, maintenance, and setup tasks.' : 'Energy load is acceptable. Add one medium-effort strategic task, then hard-stop.', payoff: 'Burnout control', risk: 'Low risk', time: '20-40 min', confidence: 'High' },
-    ],
+    today: rankedRecommendations,
     whyNow: [
       { title: 'Family runway pressure is real', detail: `Runway is ${round(engine.runway)} months. Child-related uncertainty makes liquidity timing critical.` },
       { title: 'Opportunity quality is concentrated', detail: `Top lane fit is ${topOpps[0].fit}/100; broad side-hustle exploration should stay deprioritized.` },
@@ -447,12 +545,23 @@ function recommendationNode(rec) {
   const template = document.getElementById('recommendation-template');
   const node = template.content.cloneNode(true);
   node.querySelector('.rec-title').textContent = rec.title;
-  node.querySelector('.rec-meta').textContent = rec.meta;
-  node.querySelector('.rec-description').textContent = rec.description;
+  node.querySelector('.rec-action').textContent = rec.action;
+  node.querySelector('.rec-impact').textContent = rec.expectedImpact;
+  node.querySelector('.rec-urgency').textContent = rec.urgency;
   node.querySelector('.confidence-pill').textContent = rec.confidence;
-  node.querySelector('.rec-payoff').textContent = rec.payoff;
-  node.querySelector('.rec-risk').textContent = rec.risk;
-  node.querySelector('.rec-time').textContent = rec.time;
+  node.querySelector('.rec-what-changed').textContent = rec.whatChanged;
+  node.querySelector('.rec-why-now').textContent = rec.whyNow;
+  const evidenceList = node.querySelector('.rec-evidence');
+  evidenceList.innerHTML = '';
+  (rec.because || []).forEach((evidence) => {
+    const li = document.createElement('li');
+    li.textContent = evidence;
+    evidenceList.appendChild(li);
+  });
+  const reviewDate = rec.expiresAt || rec.reviewAt;
+  node.querySelector('.rec-review').textContent = reviewDate
+    ? new Date(reviewDate).toLocaleString()
+    : 'Review in next planning cycle';
   return node;
 }
 
