@@ -20,6 +20,7 @@ A static GitHub Pages friendly prototype built with plain HTML, CSS, and JavaScr
   - Opportunity Radar
   - Location & Stability comparison
 - Shows "what changed" and "why now" logic in the command center.
+- Uses adaptive recommendations that react to weakest scoring areas and live feed freshness.
 - Stores state locally with import/export JSON support and save timestamp visibility.
 - Includes live client-side signal loading for:
   - Open-Meteo weather
@@ -28,6 +29,8 @@ A static GitHub Pages friendly prototype built with plain HTML, CSS, and JavaScr
   - ReliefWeb jobs API
   - Arbeitnow jobs API
   - RemoteOK jobs API
+  - Financial Modeling Prep gainers feed
+  - Alternative.me fear & greed feed
 - Live feeds auto-refresh daily (and can be manually refreshed immediately).
 
 ## Deploy to GitHub Pages

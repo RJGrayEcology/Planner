@@ -139,7 +139,7 @@ const DEFAULT_STATE = {
     { title: 'One-income family pressure', severity: 'High', note: 'A child arrival increases the value of liquidity and predictable cashflow.' },
     { title: 'Opportunity dilution', severity: 'Medium', note: 'Too many broad ideas reduce execution quality. Keep expertise-first filters.' },
   ],
-  signals: { weather: null, hazards: [], tech: [], jobs: [], lastUpdated: null },
+  signals: { weather: null, hazards: [], tech: [], jobs: [], investments: [], lastUpdated: null },
   connectors: [
     { name: 'Open-Meteo weather', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
     { name: 'NASA EONET hazards', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
@@ -147,6 +147,8 @@ const DEFAULT_STATE = {
     { name: 'ReliefWeb jobs API', type: 'API', status: 'live', note: 'Live humanitarian and consultancy opportunities.' },
     { name: 'Arbeitnow jobs API', type: 'API', status: 'live', note: 'Live remote/international role stream.' },
     { name: 'RemoteOK jobs API', type: 'API', status: 'live', note: 'Live remote opportunity stream for analyst/consultancy-adjacent roles.' },
+    { name: 'FMP market gainers API', type: 'API', status: 'live', note: 'Daily market momentum scan for investment radar.' },
+    { name: 'Alternative.me sentiment API', type: 'API', status: 'live', note: 'Live fear & greed signal for risk pacing.' },
   ],
   meta: { lastEngine: null, lastSavedAt: null },
 };
@@ -321,17 +323,38 @@ function generateBriefing(stateRef, engine) {
     .sort((a, b) => (b.fit * 0.58 + b.upside * 0.42) - (a.fit * 0.58 + a.upside * 0.42));
 
   const weekendMode = stateRef.profile.weekendBurnout >= 65;
+  const liveJob = stateRef.signals.jobs[0];
+  const liveInvestment = stateRef.signals.investments[0];
+  const weakestArea = [
+    { key: 'wealth', score: engine.wealthScore },
+    { key: 'resilience', score: engine.resilienceScore },
+    { key: 'career', score: engine.careerLeverageScore },
+    { key: 'family', score: engine.familyScore },
+  ].sort((a, b) => a.score - b.score)[0];
+  const staleHours = stateRef.signals.lastUpdated
+    ? round((Date.now() - new Date(stateRef.signals.lastUpdated).getTime()) / (1000 * 60 * 60))
+    : null;
 
   return {
     today: [
       { title: 'Ship one high-value output in your strongest lane', meta: 'Income leverage | Expertise-first', description: `Prioritize ${topOpps[0].title.toLowerCase()} and complete one concrete output (proposal, brief, or targeted application).`, payoff: 'High leverage', risk: 'Low risk', time: '45-60 min', confidence: 'High' },
-      { title: 'Lock house-fund transfer before discretionary spending', meta: 'Stability | House horizon', description: `Projected 5-year house fund is ${euros(engine.houseProjection)} versus target ${euros(stateRef.profile.targetHouseFund)}. Automate first, optimize later.`, payoff: 'Stability gain', risk: 'Low risk', time: '15 min', confidence: 'High' },
+      {
+        title: liveJob ? `Apply or outreach to this live role: ${liveJob.title}` : 'No live role captured yet: run manual job scan now',
+        meta: 'Career watch | Live feed',
+        description: liveJob ? `${liveJob.detail}. Use this as your first concrete career action today.` : 'Trigger “Load live signals” and shortlist one role with clear fit before ending the day.',
+        payoff: 'Career acceleration',
+        risk: 'Low risk',
+        time: '20-30 min',
+        confidence: liveJob ? 'High' : 'Medium',
+      },
       { title: weekendMode ? 'Weekend protection ON: run low-cognitive tasks only' : 'Weekend protection OFF: one medium push is allowed', meta: 'Energy protocol', description: weekendMode ? 'Burnout is elevated, so this engine is protecting recovery. Keep weekend execution to admin, maintenance, and setup tasks.' : 'Energy load is acceptable. Add one medium-effort strategic task, then hard-stop.', payoff: 'Burnout control', risk: 'Low risk', time: '20-40 min', confidence: 'High' },
     ],
     whyNow: [
       { title: 'Family runway pressure is real', detail: `Runway is ${round(engine.runway)} months. Child-related uncertainty makes liquidity timing critical.` },
       { title: 'Opportunity quality is concentrated', detail: `Top lane fit is ${topOpps[0].fit}/100; broad side-hustle exploration should stay deprioritized.` },
       { title: 'House horizon has a fixed date', detail: `${stateRef.profile.homeGoalYears}-year home objective requires consistent monthly discipline now.` },
+      { title: 'Weakest system area today', detail: `${weakestArea.key} is currently lowest (${weakestArea.score}/100), so recommendations are biased to improve it first.` },
+      { title: 'Feed freshness', detail: staleHours === null ? 'Live feeds were never loaded. Trigger refresh now.' : `Last live refresh was ${staleHours}h ago.` },
     ],
     narrative: [
       'Balanced mode means compounding wealth without adding family fragility.',
@@ -346,7 +369,7 @@ function generateBriefing(stateRef, engine) {
     wealthRecs: [
       { title: 'Increase automated investing when surplus remains positive for 3 months', detail: 'Use stability trigger rules instead of emotional timing.' },
       { title: 'Protect safety cash from house allocation drift', detail: 'Never compromise emergency runway for faster down-payment optics.' },
-      { title: 'Route high-effort hours into premium expertise packaging', detail: 'Time return is stronger than generic speculative opportunities.' },
+      { title: liveInvestment ? `Live investment watch: ${liveInvestment.title}` : 'No live investment feed item yet', detail: liveInvestment ? liveInvestment.detail : 'Load live signals to pull daily market momentum and risk sentiment inputs.' },
     ],
     familyRecs: [
       { title: 'Codify a weekend recovery protocol', detail: 'Pre-define low-energy tasks and a hard stop time for Saturday/Sunday.' },
@@ -358,7 +381,19 @@ function generateBriefing(stateRef, engine) {
       title: opp.title,
       detail: `${opp.why} Score ${round(opp.fit * 0.58 + opp.upside * 0.42)}/100.`,
       kicker: `${index + 1} • ${opp.type}`,
-    })),
+    })).concat(
+      stateRef.signals.jobs.slice(0, 2).map((job, index) => ({
+        title: `Live role ${index + 1}: ${job.title}`,
+        detail: job.detail,
+        kicker: 'Live jobs feed',
+      })),
+    ).concat(
+      stateRef.signals.investments.slice(0, 2).map((asset, index) => ({
+        title: `Live market signal ${index + 1}: ${asset.title}`,
+        detail: asset.detail,
+        kicker: 'Live investment feed',
+      })),
+    ),
   };
 }
 
@@ -531,6 +566,11 @@ function renderOpportunityRadar(briefing, engine) {
   renderStack(E.opportunityRadar, briefing.opportunityRadar, (item) => noteCard({ title: item.title, detail: item.detail }, item.kicker));
   E.opportunitySummary.innerHTML = '';
   E.opportunitySummary.appendChild(noteCard({ title: `Opportunity concentration score: ${engine.opportunityScore}/100`, detail: 'Concentration is intentional: fewer high-fit bets usually outperform many low-fit bets.' }, 'Signal'));
+  const latestInvestment = state.signals.investments[0];
+  E.opportunitySummary.appendChild(noteCard({
+    title: latestInvestment ? `Today investment signal: ${latestInvestment.title}` : 'Investment signal unavailable',
+    detail: latestInvestment ? latestInvestment.detail : 'No live investment item loaded yet. Daily automation will retry and you can refresh manually now.',
+  }, 'Investment radar'));
 }
 
 function renderSignals() {
@@ -723,13 +763,33 @@ async function loadLiveSignals() {
         url: item.url ? `https://remoteok.com${item.url}` : 'https://remoteok.com/',
       })));
 
-    const [weatherResult, hazardResult, techResult, reliefWebResult, arbeitnowResult, remoteOkResult] = await Promise.allSettled([
+    const marketGainersPromise = fetch('https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey=demo')
+      .then((res) => { if (!res.ok) throw new Error('FMP gainers request failed'); return res.json(); })
+      .then((data) => (Array.isArray(data) ? data.slice(0, 5) : []).map((item) => ({
+        title: `${item.ticker || item.symbol || 'Ticker'} (${item.changesPercentage || 'n/a'})`,
+        detail: `Top gainer | Price ${item.price || 'n/a'} | Volume ${item.volume || 'n/a'}`,
+      })));
+
+    const fearGreedPromise = fetch('https://api.alternative.me/fng/?limit=1')
+      .then((res) => { if (!res.ok) throw new Error('Fear/Greed request failed'); return res.json(); })
+      .then((data) => {
+        const latest = data?.data?.[0];
+        if (!latest) return [];
+        return [{
+          title: `Fear & Greed: ${latest.value} (${latest.value_classification})`,
+          detail: 'Use as a risk pacing signal, not a stand-alone investment decision trigger.',
+        }];
+      });
+
+    const [weatherResult, hazardResult, techResult, reliefWebResult, arbeitnowResult, remoteOkResult, marketGainersResult, fearGreedResult] = await Promise.allSettled([
       weatherPromise,
       hazardPromise,
       techPromise,
       reliefWebPromise,
       arbeitnowPromise,
       remoteOkPromise,
+      marketGainersPromise,
+      fearGreedPromise,
     ]);
     if (weatherResult.status === 'fulfilled') state.signals.weather = weatherResult.value;
     if (hazardResult.status === 'fulfilled') state.signals.hazards = hazardResult.value;
@@ -740,6 +800,11 @@ async function loadLiveSignals() {
       ...(remoteOkResult.status === 'fulfilled' ? remoteOkResult.value : []),
     ];
     state.signals.jobs = liveJobs.slice(0, 14);
+    const liveInvestments = [
+      ...(marketGainersResult.status === 'fulfilled' ? marketGainersResult.value : []),
+      ...(fearGreedResult.status === 'fulfilled' ? fearGreedResult.value : []),
+    ];
+    state.signals.investments = liveInvestments.slice(0, 8);
 
     state.signals.lastUpdated = new Date().toISOString();
     saveState();
