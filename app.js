@@ -139,7 +139,20 @@ const DEFAULT_STATE = {
     { title: 'One-income family pressure', severity: 'High', note: 'A child arrival increases the value of liquidity and predictable cashflow.' },
     { title: 'Opportunity dilution', severity: 'Medium', note: 'Too many broad ideas reduce execution quality. Keep expertise-first filters.' },
   ],
-  signals: { weather: null, hazards: [], tech: [], jobs: [], investments: [], lastUpdated: null },
+  signals: {
+    weather: null,
+    hazards: [],
+    tech: [],
+    jobs: [],
+    investments: [],
+    lastUpdated: null,
+    panelData: {
+      career: { sources: [], parseFailures: 0, parseQuality: 0 },
+      investment: { sources: [], parseFailures: 0, parseQuality: 0 },
+      hazards: { sources: [], parseFailures: 0, parseQuality: 0 },
+      recommendations: { sources: [], parseFailures: 0, parseQuality: 100 },
+    },
+  },
   connectors: [
     { name: 'Open-Meteo weather', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
     { name: 'NASA EONET hazards', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
@@ -177,7 +190,14 @@ function hydrateState(parsed = {}) {
     careerLanes: parsed.careerLanes || clone(DEFAULT_STATE.careerLanes),
     spouseIncomePaths: parsed.spouseIncomePaths || clone(DEFAULT_STATE.spouseIncomePaths),
     threats: parsed.threats || clone(DEFAULT_STATE.threats),
-    signals: { ...clone(DEFAULT_STATE.signals), ...(parsed.signals || {}) },
+    signals: {
+      ...clone(DEFAULT_STATE.signals),
+      ...(parsed.signals || {}),
+      panelData: {
+        ...clone(DEFAULT_STATE.signals.panelData),
+        ...((parsed.signals && parsed.signals.panelData) || {}),
+      },
+    },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
     meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
   };
@@ -471,6 +491,64 @@ function renderStack(container, items, renderer) {
   items.forEach((item) => container.appendChild(renderer(item)));
 }
 
+function computePanelConfidence(panelData = {}) {
+  const staleHoursThreshold = 24;
+  const sources = Array.isArray(panelData.sources) ? panelData.sources : [];
+  const successfulSources = sources.filter((source) => source?.status === 'fulfilled');
+  const parseFailures = Number(panelData.parseFailures || 0);
+  const parseQuality = clamp(Number(panelData.parseQuality ?? 0), 0, 100);
+  const newestFetchMs = successfulSources.length
+    ? Math.max(...successfulSources.map((source) => new Date(source.fetchedAt || 0).getTime()).filter((value) => Number.isFinite(value)))
+    : 0;
+  const stale = !newestFetchMs || (Date.now() - newestFetchMs) > staleHoursThreshold * 60 * 60 * 1000;
+  const singleSourceOnly = successfulSources.length <= 1;
+
+  const freshnessScore = stale ? 22 : 100;
+  const sourceCountScore = successfulSources.length >= 3 ? 100 : successfulSources.length === 2 ? 74 : successfulSources.length === 1 ? 45 : 12;
+  const parseScore = parseFailures ? Math.max(18, parseQuality - parseFailures * 18) : parseQuality;
+  const score = clamp(round(freshnessScore * 0.4 + sourceCountScore * 0.35 + parseScore * 0.25), 0, 100);
+
+  const badge = score >= 80 ? 'High' : score >= 55 ? 'Medium' : 'Low';
+  const warnings = [];
+  if (stale) warnings.push('stale data');
+  if (singleSourceOnly) warnings.push('single-source only');
+  if (parseFailures > 0) warnings.push('parse failures');
+
+  return { score, badge, warnings, stale, singleSourceOnly, parseFailures };
+}
+
+function formatPanelSourceMeta(panelData = {}) {
+  const sources = Array.isArray(panelData.sources) ? panelData.sources : [];
+  if (!sources.length) return '<p class="muted small">Sources: none yet.</p>';
+  return sources.map((source) => {
+    const ts = source.fetchedAt ? new Date(source.fetchedAt).toLocaleString() : 'n/a';
+    return `<div class="source-row"><span>${source.name || 'Source'}</span><span>${ts}</span></div>`;
+  }).join('');
+}
+
+function renderPanelConfidence(panelName, panelData = {}) {
+  const metaNode = E[`${panelName}PanelMeta`];
+  const warningNode = E[`${panelName}PanelWarning`];
+  if (!metaNode || !warningNode) return;
+
+  const confidence = computePanelConfidence(panelData);
+  metaNode.innerHTML = `
+    <div class="panel-meta-head">
+      <p class="eyebrow">Confidence</p>
+      <span class="panel-confidence-badge confidence-${confidence.badge.toLowerCase()}">${confidence.badge} • ${confidence.score}</span>
+    </div>
+    <div class="panel-source-list">${formatPanelSourceMeta(panelData)}</div>
+  `;
+
+  if (confidence.warnings.length) {
+    warningNode.textContent = `Low confidence warning: ${confidence.warnings.join(', ')}.`;
+    warningNode.classList.remove('hidden');
+  } else {
+    warningNode.textContent = '';
+    warningNode.classList.add('hidden');
+  }
+}
+
 function renderOverview(engine, briefing, changeItems) {
   const directive = getDirective(engine);
   E.primaryDirectiveTitle.textContent = directive.title;
@@ -493,6 +571,7 @@ function renderOverview(engine, briefing, changeItems) {
   renderStack(E.threatList, state.threats, (item) => noteCard({ title: item.title, detail: item.note }, item.severity));
   renderStack(E.opportunityLanes, briefing.topOpps.slice(0, 3), (item) => noteCard({ title: item.title, detail: item.why }, item.type));
   renderStack(E.checkpointList, briefing.checkpoints, (item) => noteCard(item, 'Checkpoint'));
+  renderPanelConfidence('recommendations', state.signals.panelData.recommendations);
 }
 
 function renderHorizons(briefing) {
@@ -534,6 +613,7 @@ function renderWealth(engine, briefing) {
 
   E.capitalAllocation.innerHTML = rows.map((row) => `<div class="allocation-row"><p>${row.label}</p><div class="meter"><span style="width:${row.pct}%"></span></div><p>${euros(row.value)}</p></div>`).join('');
   renderStack(E.wealthRecommendations, briefing.wealthRecs, (item) => noteCard(item, 'Wealth'));
+  renderPanelConfidence('investment', state.signals.panelData.investment);
 }
 
 function renderLocation(engine) {
@@ -560,6 +640,7 @@ function renderLocation(engine) {
 function renderCareer() {
   renderStack(E.careerLanes, state.careerLanes, (item) => noteCard({ title: item.title, detail: `${item.action} Payoff: ${item.payoff}.` }, `Fit ${item.fit}`));
   const relevantJobs = getRelevantJobs(state);
+  renderPanelConfidence('career', state.signals.panelData.career);
   if (!relevantJobs.length) {
     E.jobWatchlist.innerHTML = '<p class="empty-state">No high-fit live jobs found yet. Feeds auto-refresh daily; click “Load live signals” to rescan now.</p>';
     return;
@@ -606,6 +687,7 @@ function renderSignals() {
 
   if (state.signals.hazards.length) renderStack(E.hazardSignal, state.signals.hazards, (item) => noteCard(item, 'NASA EONET'));
   else E.hazardSignal.innerHTML = '<p class="empty-state">No live hazard feed loaded yet.</p>';
+  renderPanelConfidence('hazards', state.signals.panelData.hazards);
 
   if (state.signals.tech.length) renderStack(E.techSignal, state.signals.tech, (item) => noteCard(item, 'Hacker News'));
   else E.techSignal.innerHTML = '<p class="empty-state">No live tech signal loaded yet.</p>';
@@ -746,6 +828,22 @@ async function loadLiveSignals() {
   E.loadLiveSignals.disabled = true;
 
   try {
+    const panelSources = {
+      career: [],
+      investment: [],
+      hazards: [],
+      recommendations: [],
+    };
+    const markSource = (panel, name, status, itemCount = 0, parseFailures = 0) => {
+      panelSources[panel].push({
+        name,
+        status,
+        itemCount,
+        parseFailures,
+        fetchedAt: new Date().toISOString(),
+      });
+    };
+
     const weatherPromise = fetch('https://api.open-meteo.com/v1/forecast?latitude=50.85&longitude=4.35&current=temperature_2m,weather_code,wind_speed_10m&timezone=Europe%2FBerlin')
       .then((res) => { if (!res.ok) throw new Error('Weather request failed'); return res.json(); })
       .then((data) => ({ city: 'Brussels', temp: round(data.current.temperature_2m), wind: round(data.current.wind_speed_10m), summary: weatherCodeToText(data.current.weather_code) }));
@@ -817,19 +915,39 @@ async function loadLiveSignals() {
       fearGreedPromise,
     ]);
     if (weatherResult.status === 'fulfilled') state.signals.weather = weatherResult.value;
-    if (hazardResult.status === 'fulfilled') state.signals.hazards = hazardResult.value;
+    if (hazardResult.status === 'fulfilled') {
+      state.signals.hazards = hazardResult.value;
+      markSource('hazards', 'NASA EONET hazards', 'fulfilled', hazardResult.value.length, 0);
+    } else {
+      markSource('hazards', 'NASA EONET hazards', 'rejected', 0, 1);
+    }
     if (techResult.status === 'fulfilled') state.signals.tech = techResult.value;
+    markSource('recommendations', 'Internal strategy engine', 'fulfilled', 1, 0);
     const liveJobs = [
       ...(reliefWebResult.status === 'fulfilled' ? reliefWebResult.value : []),
       ...(arbeitnowResult.status === 'fulfilled' ? arbeitnowResult.value : []),
       ...(remotiveResult.status === 'fulfilled' ? remotiveResult.value : []),
     ];
+    markSource('career', 'ReliefWeb jobs API', reliefWebResult.status, reliefWebResult.status === 'fulfilled' ? reliefWebResult.value.length : 0, reliefWebResult.status === 'fulfilled' ? 0 : 1);
+    markSource('career', 'Arbeitnow jobs API', arbeitnowResult.status, arbeitnowResult.status === 'fulfilled' ? arbeitnowResult.value.length : 0, arbeitnowResult.status === 'fulfilled' ? 0 : 1);
+    markSource('career', 'Remotive jobs API', remotiveResult.status, remotiveResult.status === 'fulfilled' ? remotiveResult.value.length : 0, remotiveResult.status === 'fulfilled' ? 0 : 1);
     state.signals.jobs = liveJobs.slice(0, 14);
     const liveInvestments = [
       ...(marketGainersResult.status === 'fulfilled' ? marketGainersResult.value : []),
       ...(fearGreedResult.status === 'fulfilled' ? fearGreedResult.value : []),
     ];
+    markSource('investment', 'FMP market gainers API', marketGainersResult.status, marketGainersResult.status === 'fulfilled' ? marketGainersResult.value.length : 0, marketGainersResult.status === 'fulfilled' ? 0 : 1);
+    markSource('investment', 'Alternative.me sentiment API', fearGreedResult.status, fearGreedResult.status === 'fulfilled' ? fearGreedResult.value.length : 0, fearGreedResult.status === 'fulfilled' ? 0 : 1);
     state.signals.investments = liveInvestments.slice(0, 8);
+    Object.entries(panelSources).forEach(([panel, sources]) => {
+      const parseFailures = sources.reduce((sum, source) => sum + (source.parseFailures || 0), 0);
+      const fulfilledCount = sources.filter((source) => source.status === 'fulfilled').length;
+      state.signals.panelData[panel] = {
+        sources,
+        parseFailures,
+        parseQuality: fulfilledCount ? round((fulfilledCount / Math.max(sources.length, 1)) * 100) : 0,
+      };
+    });
 
     state.signals.lastUpdated = new Date().toISOString();
     saveState();
@@ -876,6 +994,8 @@ function cacheElements() {
     weekendProtectionScore: document.getElementById('weekend-protection-score'),
 
     todayActions: document.getElementById('today-actions'),
+    recommendationsPanelMeta: document.getElementById('recommendations-panel-meta'),
+    recommendationsPanelWarning: document.getElementById('recommendations-panel-warning'),
     whyNow: document.getElementById('why-now'),
     whatChanged: document.getElementById('what-changed'),
     threatList: document.getElementById('threat-list'),
@@ -893,12 +1013,16 @@ function cacheElements() {
     assetMeter: document.getElementById('asset-meter'),
     capitalAllocation: document.getElementById('capital-allocation'),
     wealthRecommendations: document.getElementById('wealth-recommendations'),
+    investmentPanelMeta: document.getElementById('investment-panel-meta'),
+    investmentPanelWarning: document.getElementById('investment-panel-warning'),
 
     countryComparison: document.getElementById('country-comparison'),
     locationRecommendation: document.getElementById('location-recommendation'),
 
     careerLanes: document.getElementById('career-lanes'),
     jobWatchlist: document.getElementById('job-watchlist'),
+    careerPanelMeta: document.getElementById('career-panel-meta'),
+    careerPanelWarning: document.getElementById('career-panel-warning'),
 
     runwayMonths: document.getElementById('runway-months'),
     spousePotential: document.getElementById('spouse-potential'),
@@ -912,6 +1036,8 @@ function cacheElements() {
 
     weatherSignal: document.getElementById('weather-signal'),
     hazardSignal: document.getElementById('hazard-signal'),
+    hazardsPanelMeta: document.getElementById('hazards-panel-meta'),
+    hazardsPanelWarning: document.getElementById('hazards-panel-warning'),
     techSignal: document.getElementById('tech-signal'),
     connectorStatus: document.getElementById('connector-status'),
 
