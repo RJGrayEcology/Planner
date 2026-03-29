@@ -152,6 +152,47 @@ a { color: inherit; }
   justify-content: flex-end;
 }
 
+.trend-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trend-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.range-toggle {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.trend-range-btn.active {
+  background: linear-gradient(135deg, rgba(94, 234, 212, 0.22), rgba(96, 165, 250, 0.18));
+}
+
+.trend-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.chart-wrap {
+  height: 280px;
+}
+
+.chart-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .btn {
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -336,8 +377,8 @@ a { color: inherit; }
   margin: 0 0 4px;
 }
 
-.rec-meta,
-.rec-description,
+.rec-action,
+.rec-impact,
 .rec-footer,
 .note-card p,
 .country-meta,
@@ -347,7 +388,7 @@ a { color: inherit; }
   margin: 0;
 }
 
-.rec-meta,
+.rec-action,
 .country-meta,
 .connector-card p,
 .lane-card p,
@@ -357,7 +398,7 @@ a { color: inherit; }
   font-size: 0.86rem;
 }
 
-.rec-description {
+.rec-impact {
   margin-top: 10px;
   line-height: 1.55;
   color: #dce7f7;
@@ -377,6 +418,20 @@ a { color: inherit; }
   background: rgba(255,255,255,0.05);
   padding: 5px 9px;
   border-radius: 999px;
+}
+
+.rec-section {
+  margin-top: 10px;
+}
+
+.rec-section p {
+  margin: 8px 0 0;
+}
+
+.rec-evidence {
+  margin: 8px 0 0 18px;
+  padding: 0;
+  color: #dce7f7;
 }
 
 .confidence-pill {
@@ -510,6 +565,7 @@ a { color: inherit; }
 .status-live { background: rgba(74, 222, 128, 0.14); color: var(--success); }
 .status-mock { background: rgba(251, 191, 36, 0.14); color: var(--warn); }
 .status-planned { background: rgba(148, 163, 184, 0.14); color: #d1d5db; }
+.stale-warning { color: #fbbf24; font-weight: 700; }
 
 .form-grid {
   display: grid;
@@ -558,6 +614,64 @@ select {
 .weight-row { display: grid; gap: 8px; }
 .weight-row input { accent-color: var(--accent); }
 .file-label { margin-top: 6px; }
+.btn-inline { padding: 7px 10px; border-radius: 10px; }
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.scenario-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.scenario-table th,
+.scenario-table td {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  text-align: left;
+  padding: 10px 8px;
+  vertical-align: top;
+  font-size: 0.86rem;
+}
+
+.scenario-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.rec-log-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rec-save {
+  width: fit-content;
+}
+
+.weekly-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.weekly-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.weekly-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 
 .note-card h4,
 .lane-card h4,
@@ -671,6 +785,7 @@ select {
   .topbar,
   .hero-header,
   .rec-top,
+  .rec-log-grid,
   .allocation-row,
   .country-score-row,
   .city-row-header,
