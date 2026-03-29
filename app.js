@@ -151,7 +151,44 @@ const DEFAULT_STATE = {
     { name: 'FMP market gainers API', type: 'API', status: 'live', note: 'Daily market momentum scan for investment radar.' },
     { name: 'Alternative.me sentiment API', type: 'API', status: 'live', note: 'Live fear & greed signal for risk pacing.' },
   ],
-  history: { daily: [] },
+  locations: {
+    countries: {
+      belgium: { lat: 50.8503, lng: 4.3517, penaltyDrivers: 'Housing pressure in Brussels, tax complexity, dual-language admin overhead.' },
+      france: { lat: 48.8566, lng: 2.3522, penaltyDrivers: 'Metro rent pressure, bureaucracy friction, variable regional wage acceleration.' },
+      'united-states': { lat: 38.9072, lng: -77.0369, penaltyDrivers: 'Healthcare volatility, childcare costs, and uneven safety by metro.' },
+      netherlands: { lat: 52.3676, lng: 4.9041, penaltyDrivers: 'Housing supply constraints and high rent-to-income ratios in major hubs.' },
+      canada: { lat: 45.4215, lng: -75.6972, penaltyDrivers: 'Housing cost inflation in top metros and long winter utility burden.' },
+      germany: { lat: 52.52, lng: 13.405, penaltyDrivers: 'Tax and compliance complexity plus language ramp in key sectors.' },
+      portugal: { lat: 38.7223, lng: -9.1393, penaltyDrivers: 'Lower salary ceiling and increased property demand in popular cities.' },
+      switzerland: { lat: 46.948, lng: 7.4474, penaltyDrivers: 'High cost of living, childcare costs, and tight housing supply.' },
+    },
+    cityRows: [
+      {
+        id: 'brussels-belgium',
+        countryId: 'belgium',
+        city: 'Brussels',
+        source: 'manual',
+        lat: 50.8503,
+        lng: 4.3517,
+        housingPressure: 68,
+        safetyProxy: 74,
+        childcareProxy: 77,
+        commuteAirportNotes: 'Dense transit + direct BRU access. Some districts show higher rent pressure.',
+      },
+      {
+        id: 'lyon-france',
+        countryId: 'france',
+        city: 'Lyon',
+        source: 'manual',
+        lat: 45.764,
+        lng: 4.8357,
+        housingPressure: 60,
+        safetyProxy: 70,
+        childcareProxy: 73,
+        commuteAirportNotes: 'Strong train links and airport access. Commute quality depends on arrondissement.',
+      },
+    ],
+  },
   meta: { lastEngine: null, lastSavedAt: null },
 };
 
@@ -182,7 +219,12 @@ function hydrateState(parsed = {}) {
     threats: parsed.threats || clone(DEFAULT_STATE.threats),
     signals: { ...clone(DEFAULT_STATE.signals), ...(parsed.signals || {}) },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
-    history: { ...clone(DEFAULT_STATE.history), ...(parsed.history || {}) },
+    locations: {
+      ...clone(DEFAULT_STATE.locations),
+      ...(parsed.locations || {}),
+      countries: { ...clone(DEFAULT_STATE.locations.countries), ...((parsed.locations || {}).countries || {}) },
+      cityRows: Array.isArray((parsed.locations || {}).cityRows) ? parsed.locations.cityRows : clone(DEFAULT_STATE.locations.cityRows),
+    },
     meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
   };
 
@@ -202,6 +244,9 @@ function loadState() {
 }
 
 let state = loadState();
+let locationMap;
+let countryLayer;
+let cityLayer;
 
 function saveState() {
   state.meta.lastSavedAt = new Date().toISOString();
@@ -791,6 +836,166 @@ function renderWealth(engine, briefing) {
   renderStack(E.wealthRecommendations, briefing.wealthRecs, (item) => noteCard(item, 'Wealth'));
 }
 
+function scoreToColor(score) {
+  if (score >= 80) return '#4ade80';
+  if (score >= 65) return '#5eead4';
+  if (score >= 50) return '#fbbf24';
+  return '#fb7185';
+}
+
+function getCountryMapData(locationScores) {
+  return locationScores
+    .map((country) => {
+      const geo = state.locations.countries[country.id];
+      if (!geo) return null;
+      return {
+        ...country,
+        lat: Number(geo.lat),
+        lng: Number(geo.lng),
+        penaltyDrivers: geo.penaltyDrivers || 'No explicit penalty assumptions set.',
+      };
+    })
+    .filter(Boolean);
+}
+
+function computeCityComposite(city) {
+  return clamp(round((100 - Number(city.housingPressure || 0)) * 0.35 + Number(city.safetyProxy || 0) * 0.35 + Number(city.childcareProxy || 0) * 0.3), 0, 100);
+}
+
+function ensureLocationMap() {
+  if (locationMap || !E.locationMap || typeof L === 'undefined') return;
+  locationMap = L.map(E.locationMap).setView([47.2, 4], 3);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 8,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(locationMap);
+  countryLayer = L.layerGroup().addTo(locationMap);
+  cityLayer = L.layerGroup().addTo(locationMap);
+}
+
+function renderLocationMap(engine) {
+  ensureLocationMap();
+  if (!locationMap || !countryLayer || !cityLayer) return;
+
+  const countryData = getCountryMapData(engine.locationScores);
+  countryLayer.clearLayers();
+  cityLayer.clearLayers();
+
+  countryData.forEach((country) => {
+    L.circleMarker([country.lat, country.lng], {
+      radius: 7 + (country.total / 20),
+      color: scoreToColor(country.total),
+      fillColor: scoreToColor(country.affordability),
+      fillOpacity: 0.68,
+      weight: 2,
+    })
+      .bindTooltip(
+        `<strong>${country.name}</strong><br/>
+        Composite: ${country.total}<br/>
+        Affordability: ${country.affordability}<br/>
+        Family stability: ${country.familyStability}<br/>
+        Upside: ${country.wealthUpside}<br/>
+        Penalty drivers: ${country.penaltyDrivers}`,
+      )
+      .addTo(countryLayer);
+  });
+
+  (state.locations.cityRows || []).forEach((city) => {
+    if (!Number.isFinite(Number(city.lat)) || !Number.isFinite(Number(city.lng))) return;
+    const composite = computeCityComposite(city);
+    L.marker([Number(city.lat), Number(city.lng)])
+      .bindTooltip(
+        `<strong>${city.city || 'Unnamed city'}</strong> (${city.source || 'manual'})<br/>
+        Country: ${COUNTRY_LIBRARY[city.countryId]?.name || city.countryId || 'n/a'}<br/>
+        Composite: ${composite}<br/>
+        Housing pressure proxy: ${Number(city.housingPressure || 0)}<br/>
+        Safety proxy: ${Number(city.safetyProxy || 0)}<br/>
+        Childcare/family proxy: ${Number(city.childcareProxy || 0)}<br/>
+        Commute/airport notes: ${city.commuteAirportNotes || 'n/a'}`,
+      )
+      .addTo(cityLayer);
+  });
+
+  setTimeout(() => locationMap.invalidateSize(), 0);
+}
+
+function renderCountryAssumptionRows(engine) {
+  const countryData = getCountryMapData(engine.locationScores);
+  E.countryMapTable.innerHTML = countryData.map((country) => `
+    <article class="assumption-row">
+      <p><strong>${country.name}</strong> (${country.type})</p>
+      <p class="muted small">Score ${country.total} • Affordability ${country.affordability} • Family ${country.familyStability} • Upside ${country.wealthUpside}</p>
+      <label>Penalty drivers
+        <input type="text" data-country-penalty="${country.id}" value="${country.penaltyDrivers}" />
+      </label>
+    </article>
+  `).join('');
+
+  E.countryMapTable.querySelectorAll('[data-country-penalty]').forEach((input) => {
+    input.addEventListener('change', (event) => {
+      const id = event.target.dataset.countryPenalty;
+      if (!state.locations.countries[id]) state.locations.countries[id] = {};
+      state.locations.countries[id].penaltyDrivers = event.target.value;
+      saveState();
+      renderAll();
+    });
+  });
+}
+
+function renderCityAssumptionRows() {
+  const cityRows = state.locations.cityRows || [];
+  if (!cityRows.length) {
+    E.cityAssumptionRows.innerHTML = '<p class="empty-state">No city rows yet. Add one to model local assumptions.</p>';
+    return;
+  }
+
+  E.cityAssumptionRows.innerHTML = cityRows.map((city, index) => `
+    <article class="assumption-row city-row">
+      <div class="city-grid">
+        <label>City<input type="text" data-city-field="${index}:city" value="${city.city || ''}" /></label>
+        <label>Country
+          <select data-city-field="${index}:countryId">
+            ${Object.keys(COUNTRY_LIBRARY).map((id) => `<option value="${id}" ${city.countryId === id ? 'selected' : ''}>${COUNTRY_LIBRARY[id].name}</option>`).join('')}
+          </select>
+        </label>
+        <label>Source<input type="text" data-city-field="${index}:source" value="${city.source || 'manual'}" /></label>
+        <label>Lat<input type="number" step="0.0001" data-city-field="${index}:lat" value="${city.lat ?? ''}" /></label>
+        <label>Lng<input type="number" step="0.0001" data-city-field="${index}:lng" value="${city.lng ?? ''}" /></label>
+        <label>Housing pressure<input type="number" min="0" max="100" data-city-field="${index}:housingPressure" value="${city.housingPressure ?? 0}" /></label>
+        <label>Safety proxy<input type="number" min="0" max="100" data-city-field="${index}:safetyProxy" value="${city.safetyProxy ?? 0}" /></label>
+        <label>Childcare/family proxy<input type="number" min="0" max="100" data-city-field="${index}:childcareProxy" value="${city.childcareProxy ?? 0}" /></label>
+      </div>
+      <label>Commute / airport access notes
+        <input type="text" data-city-field="${index}:commuteAirportNotes" value="${city.commuteAirportNotes || ''}" />
+      </label>
+      <div class="city-row-actions">
+        <span class="muted small">Composite city score: ${computeCityComposite(city)}</span>
+        <button class="btn btn-secondary" type="button" data-delete-city="${index}">Remove</button>
+      </div>
+    </article>
+  `).join('');
+
+  E.cityAssumptionRows.querySelectorAll('[data-city-field]').forEach((input) => {
+    input.addEventListener('change', (event) => {
+      const [indexRaw, field] = event.target.dataset.cityField.split(':');
+      const index = Number(indexRaw);
+      if (!state.locations.cityRows[index]) return;
+      const numericFields = ['lat', 'lng', 'housingPressure', 'safetyProxy', 'childcareProxy'];
+      state.locations.cityRows[index][field] = numericFields.includes(field) ? Number(event.target.value) : event.target.value;
+      saveState();
+      renderAll();
+    });
+  });
+
+  E.cityAssumptionRows.querySelectorAll('[data-delete-city]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      state.locations.cityRows.splice(Number(event.target.dataset.deleteCity), 1);
+      saveState();
+      renderAll();
+    });
+  });
+}
+
 function renderLocation(engine) {
   E.countryComparison.innerHTML = engine.locationScores.map((country) => `
     <article class="country-card">
@@ -810,6 +1015,9 @@ function renderLocation(engine) {
   E.locationRecommendation.innerHTML = '';
   E.locationRecommendation.appendChild(noteCard({ title: `${engine.topCountry.name} leads the current weighted model`, detail: `Lead is driven by balanced family stability and upside. Housing stress penalty applied: ${engine.topCountry.housingStressPenalty}.` }, 'Current leader'));
   E.locationRecommendation.appendChild(noteCard({ title: 'Belgium / France / US are always retained as anchors', detail: 'Two optional countries are for scenario testing, not replacing baseline references.' }, 'Model rule'));
+  renderCountryAssumptionRows(engine);
+  renderCityAssumptionRows();
+  renderLocationMap(engine);
 }
 
 function renderCareer() {
@@ -971,6 +1179,9 @@ function setupNavigation() {
       document.querySelectorAll('.section').forEach((section) => section.classList.remove('visible'));
       document.getElementById(button.dataset.section).classList.add('visible');
       E.sectionTitle.textContent = button.textContent;
+      if (button.dataset.section === 'location-radar' && locationMap) {
+        setTimeout(() => locationMap.invalidateSize(), 60);
+      }
     });
   });
 }
@@ -1021,24 +1232,22 @@ function setupForms() {
 
 function setupActions() {
   E.refreshBriefing.addEventListener('click', () => renderAll());
-  E.loadLiveSignals.addEventListener('click', refreshFeeds);
-}
-
-function setupTrendControls() {
-  E.trendRangeButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      E.trendRangeButtons.forEach((node) => node.classList.remove('active'));
-      button.classList.add('active');
-      state.meta.trendRangeDays = Number(button.dataset.range);
-      saveState();
-      renderTrends();
+  E.loadLiveSignals.addEventListener('click', loadLiveSignals);
+  E.addCityRow.addEventListener('click', () => {
+    state.locations.cityRows.push({
+      id: `city-${Date.now()}`,
+      countryId: 'belgium',
+      city: 'New city',
+      source: 'manual',
+      lat: 50.85,
+      lng: 4.35,
+      housingPressure: 50,
+      safetyProxy: 50,
+      childcareProxy: 50,
+      commuteAirportNotes: '',
     });
-  });
-
-  E.trendMAToggle.addEventListener('change', () => {
-    state.meta.showMovingAverage = E.trendMAToggle.checked;
     saveState();
-    renderTrends();
+    renderAll();
   });
 }
 
@@ -1338,6 +1547,10 @@ function cacheElements() {
 
     countryComparison: document.getElementById('country-comparison'),
     locationRecommendation: document.getElementById('location-recommendation'),
+    locationMap: document.getElementById('location-map'),
+    countryMapTable: document.getElementById('country-map-table'),
+    cityAssumptionRows: document.getElementById('city-assumption-rows'),
+    addCityRow: document.getElementById('add-city-row'),
 
     careerLanes: document.getElementById('career-lanes'),
     jobWatchlist: document.getElementById('job-watchlist'),

@@ -582,6 +582,7 @@ label {
 }
 
 input[type="number"],
+input[type="text"],
 input[type="file"] {
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.18);
@@ -633,6 +634,54 @@ select {
   font-style: italic;
 }
 
+#location-map {
+  height: 430px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  overflow: hidden;
+}
+
+.map-subtitle {
+  margin: 0 0 10px;
+}
+
+.table-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.assumption-row {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.assumption-row p {
+  margin: 0 0 8px;
+}
+
+.city-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.city-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.city-row-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 @media (max-width: 1280px) {
   .hero-grid,
   .two-col,
@@ -671,9 +720,15 @@ select {
   .hero-header,
   .rec-top,
   .allocation-row,
-  .country-score-row {
+  .country-score-row,
+  .city-row-header,
+  .city-row-actions {
     display: flex;
     flex-direction: column;
+  }
+
+  .city-grid {
+    grid-template-columns: 1fr;
   }
 
   .nav {
