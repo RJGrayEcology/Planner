@@ -510,6 +510,7 @@ a { color: inherit; }
 .status-live { background: rgba(74, 222, 128, 0.14); color: var(--success); }
 .status-mock { background: rgba(251, 191, 36, 0.14); color: var(--warn); }
 .status-planned { background: rgba(148, 163, 184, 0.14); color: #d1d5db; }
+.stale-warning { color: #fbbf24; font-weight: 700; }
 
 .form-grid {
   display: grid;
