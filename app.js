@@ -129,6 +129,26 @@ const DEFAULT_STATE = {
     { title: 'Remote strategic analyst roles linked to OSINT, risk, and monitoring', fit: 82, payoff: 'Material income lift without relocation', action: 'Monitor remote + Brussels + France roles with strict keyword filters.' },
     { title: 'Thought leadership and research publishing lane', fit: 76, payoff: 'Authority and lead flow compounding', action: 'Publish one short high-signal expert output monthly.' },
   ],
+  laneProfiles: [
+    {
+      id: 'intl-intelligence',
+      title: 'International intelligence analyst',
+      targetDomains: ['intelligence', 'osint', 'risk'],
+      seniority: 'mid',
+      preferredLocations: ['belgium', 'france', 'eu', 'europe'],
+      remotePreference: 'hybrid',
+      contractPreferences: ['full-time', 'contract'],
+    },
+    {
+      id: 'conservation-consultancy',
+      title: 'Conservation / illicit-trade consultancy',
+      targetDomains: ['conservation', 'osint', 'risk'],
+      seniority: 'senior',
+      preferredLocations: ['global', 'remote', 'europe'],
+      remotePreference: 'remote',
+      contractPreferences: ['consultancy', 'contract'],
+    },
+  ],
   spouseIncomePaths: [
     { title: 'Scientific and educational writing', fit: 87, ramp: 'Fast-medium', why: 'Fits flexible scheduling and links to primatology, conservation, parenting, and education niches.' },
     { title: 'Remote education and tutoring content', fit: 81, ramp: 'Fast', why: 'Can run in small time blocks, then evolve into reusable products.' },
@@ -139,7 +159,15 @@ const DEFAULT_STATE = {
     { title: 'One-income family pressure', severity: 'High', note: 'A child arrival increases the value of liquidity and predictable cashflow.' },
     { title: 'Opportunity dilution', severity: 'Medium', note: 'Too many broad ideas reduce execution quality. Keep expertise-first filters.' },
   ],
-  signals: { weather: null, hazards: [], tech: [], jobs: [], investments: [], lastUpdated: null },
+  signals: {
+    weather: null,
+    hazards: [],
+    tech: [],
+    jobs: [],
+    jobDecisions: {},
+    investments: [],
+    lastUpdated: null,
+  },
   connectors: [
     { name: 'Open-Meteo weather', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
     { name: 'NASA EONET hazards', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
@@ -175,9 +203,14 @@ function hydrateState(parsed = {}) {
     weights: { ...clone(DEFAULT_STATE.weights), ...(parsed.weights || {}) },
     opportunities: parsed.opportunities || clone(DEFAULT_STATE.opportunities),
     careerLanes: parsed.careerLanes || clone(DEFAULT_STATE.careerLanes),
+    laneProfiles: parsed.laneProfiles || clone(DEFAULT_STATE.laneProfiles),
     spouseIncomePaths: parsed.spouseIncomePaths || clone(DEFAULT_STATE.spouseIncomePaths),
     threats: parsed.threats || clone(DEFAULT_STATE.threats),
-    signals: { ...clone(DEFAULT_STATE.signals), ...(parsed.signals || {}) },
+    signals: {
+      ...clone(DEFAULT_STATE.signals),
+      ...(parsed.signals || {}),
+      jobDecisions: { ...clone(DEFAULT_STATE.signals.jobDecisions), ...(parsed.signals?.jobDecisions || {}) },
+    },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
     meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
   };
@@ -319,25 +352,90 @@ function computeChanges(currentEngine, previousEngine) {
 }
 
 function getRelevantJobs(stateRef) {
-  const baseKeywords = [
-    'analyst', 'intelligence', 'osint', 'monitoring', 'risk', 'investigation',
-    'conservation', 'wildlife', 'illicit', 'policy', 'research', 'security',
-    'europol', 'interpol', 'ai', 'remote',
-  ];
-  const laneKeywords = stateRef.careerLanes
-    .flatMap((lane) => `${lane.title} ${lane.action}`.toLowerCase().split(/[^a-z0-9]+/g))
-    .filter((word) => word.length > 3);
-  const keywords = [...new Set([...baseKeywords, ...laneKeywords])];
-
+  const seenKeys = new Set();
   return stateRef.signals.jobs
     .map((job) => {
-      const haystack = `${job.title} ${job.detail}`.toLowerCase();
-      const score = keywords.reduce((acc, keyword) => (haystack.includes(keyword) ? acc + 1 : acc), 0);
-      return { ...job, relevance: score };
+      const exclusion = getJobExclusionReason(job, stateRef.laneProfiles);
+      const fit = scoreJobFit(job, stateRef.laneProfiles);
+      const repostKey = `${normalizeText(job.title)}|${normalizeText(job.company || '')}`;
+      const isDuplicate = seenKeys.has(repostKey);
+      seenKeys.add(repostKey);
+      return { ...job, fit, exclusion: exclusion || (isDuplicate ? 'low-quality repost patterns' : null) };
     })
-    .filter((job) => job.relevance >= 2)
-    .sort((a, b) => b.relevance - a.relevance)
+    .filter((job) => !job.exclusion)
+    .sort((a, b) => b.fit.total - a.fit.total)
     .slice(0, 10);
+}
+
+function normalizeText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function detectDomain(haystack) {
+  if (/(intelligence|threat|geopolit|crime|enforcement|interpol|europol)/.test(haystack)) return 'intelligence';
+  if (/(osint|open source|investigat|monitoring|due diligence)/.test(haystack)) return 'osint';
+  if (/(risk|security|compliance|fraud|aml|sanction)/.test(haystack)) return 'risk';
+  if (/(conservation|wildlife|biodiversity|park|environment|ecology)/.test(haystack)) return 'conservation';
+  return 'other';
+}
+
+function detectSeniority(haystack) {
+  if (/(director|head|lead|principal|senior|expert)/.test(haystack)) return 'senior';
+  if (/(intern|junior|entry|assistant|associate)/.test(haystack)) return 'junior';
+  return 'mid';
+}
+
+function scoreJobFit(job, laneProfiles) {
+  const haystack = normalizeText(`${job.title} ${job.detail} ${job.location || ''}`);
+  const domain = detectDomain(haystack);
+  const seniority = detectSeniority(haystack);
+  const isRemote = /(remote|anywhere|worldwide)/.test(haystack) || job.isRemote;
+  const hasSalary = Boolean(job.salary);
+  const contractLabel = normalizeText(job.contractType || job.detail);
+
+  const laneScores = laneProfiles.map((lane) => {
+    const domainMatch = lane.targetDomains.includes(domain) ? 100 : 30;
+    const seniorityMatch = lane.seniority === seniority ? 100 : lane.seniority === 'senior' && seniority === 'mid' ? 70 : 35;
+    const locationMatch = isRemote
+      ? (lane.remotePreference === 'remote' ? 100 : lane.remotePreference === 'hybrid' ? 80 : 60)
+      : (lane.preferredLocations.some((loc) => haystack.includes(loc)) ? 85 : 45);
+    const contractTypeMatch = lane.contractPreferences.some((type) => contractLabel.includes(type)) ? 100 : 55;
+    const salaryVisibility = hasSalary ? 100 : 0;
+
+    const weighted = round(
+      domainMatch * 0.4
+      + seniorityMatch * 0.22
+      + locationMatch * 0.18
+      + contractTypeMatch * 0.12
+      + salaryVisibility * 0.08,
+    );
+
+    return {
+      lane: lane.title,
+      weighted,
+      breakdown: { domainMatch, seniorityMatch, locationMatch, contractTypeMatch, salaryVisibility },
+      tags: { domain, seniority, isRemote },
+    };
+  });
+
+  const best = laneScores.sort((a, b) => b.weighted - a.weighted)[0];
+  return { total: best.weighted, lane: best.lane, breakdown: best.breakdown, tags: best.tags };
+}
+
+function getJobExclusionReason(job, laneProfiles) {
+  const haystack = normalizeText(`${job.title} ${job.detail} ${job.company || ''}`);
+  const domain = detectDomain(haystack);
+  const seniority = detectSeniority(haystack);
+
+  if (domain === 'other') return 'irrelevant domains';
+  const supportsDomain = laneProfiles.some((lane) => lane.targetDomains.includes(domain));
+  if (!supportsDomain) return 'irrelevant domains';
+
+  const seniorityAligned = laneProfiles.some((lane) => lane.seniority === seniority || (lane.seniority === 'senior' && seniority === 'mid'));
+  if (!seniorityAligned) return 'mismatch seniority';
+
+  if (/(urgent hiring|walk in|multiple openings|telegram|whatsapp)/.test(haystack)) return 'low-quality repost patterns';
+  return null;
 }
 
 function generateBriefing(stateRef, engine) {
@@ -407,7 +505,7 @@ function generateBriefing(stateRef, engine) {
     })).concat(
       relevantJobs.slice(0, 2).map((job, index) => ({
         title: `Live role ${index + 1}: ${job.title}`,
-        detail: `${job.detail} | Relevance ${job.relevance}`,
+        detail: `${job.detail} | Fit ${job.fit.total}`,
         kicker: 'Live jobs feed',
       })),
     ).concat(
@@ -561,17 +659,27 @@ function renderCareer() {
   renderStack(E.careerLanes, state.careerLanes, (item) => noteCard({ title: item.title, detail: `${item.action} Payoff: ${item.payoff}.` }, `Fit ${item.fit}`));
   const relevantJobs = getRelevantJobs(state);
   if (!relevantJobs.length) {
-    E.jobWatchlist.innerHTML = '<p class="empty-state">No high-fit live jobs found yet. Feeds auto-refresh daily; click “Load live signals” to rescan now.</p>';
+    E.jobWatchlist.innerHTML = '<p class="empty-state">No high-fit jobs after quality filters yet. Feeds auto-refresh daily; click “Load live signals” to rescan now.</p>';
     return;
   }
 
-  E.jobWatchlist.innerHTML = relevantJobs.slice(0, 8).map((item) => `
+  E.jobWatchlist.innerHTML = relevantJobs.slice(0, 10).map((item) => {
+    const decision = state.signals.jobDecisions[item.id];
+    return `
     <article class="note-card">
       <h4><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a></h4>
       <p>${item.detail}</p>
-      <p class="note-meta">High-fit relevance: ${item.relevance}</p>
+      <p class="note-meta">Top 10 high-fit jobs today • Score ${item.fit.total} • Lane ${item.fit.lane}</p>
+      <p class="note-meta">Breakdown: domain ${item.fit.breakdown.domainMatch}, seniority ${item.fit.breakdown.seniorityMatch}, location/remote ${item.fit.breakdown.locationMatch}, contract ${item.fit.breakdown.contractTypeMatch}, salary visibility ${item.fit.breakdown.salaryVisibility}</p>
+      <div class="job-status-row">
+        <button class="status-tag ${decision?.status === 'saved' ? 'active' : ''}" data-job-id="${item.id}" data-status="saved">Saved</button>
+        <button class="status-tag ${decision?.status === 'applied' ? 'active' : ''}" data-job-id="${item.id}" data-status="applied">Applied</button>
+        <button class="status-tag ${decision?.status === 'ignored' ? 'active' : ''}" data-job-id="${item.id}" data-status="ignored">Ignored</button>
+      </div>
+      ${decision ? `<p class="note-meta">Decision: ${decision.status}${decision.reason ? ` (${decision.reason})` : ''} • Snapshot score ${decision.scoreAtDecision}</p>` : ''}
     </article>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function renderFamily(engine, briefing) {
@@ -733,6 +841,27 @@ function setupForms() {
 function setupActions() {
   E.refreshBriefing.addEventListener('click', () => renderAll());
   E.loadLiveSignals.addEventListener('click', loadLiveSignals);
+  E.jobWatchlist.addEventListener('click', (event) => {
+    const button = event.target.closest('.status-tag');
+    if (!button) return;
+    const jobId = button.dataset.jobId;
+    const status = button.dataset.status;
+    const rankedJobs = getRelevantJobs(state);
+    const job = rankedJobs.find((item) => item.id === jobId);
+    if (!job) return;
+    const reasonPrompt = status === 'ignored'
+      ? 'Why ignored? (optional)'
+      : `Add a note for "${status}" (optional)`;
+    const reason = window.prompt(reasonPrompt, '') || '';
+    state.signals.jobDecisions[jobId] = {
+      status,
+      reason,
+      scoreAtDecision: job.fit.total,
+      decidedAt: new Date().toISOString(),
+    };
+    saveState();
+    renderCareer();
+  });
 }
 
 function weatherCodeToText(code) {
@@ -767,24 +896,41 @@ async function loadLiveSignals() {
     const reliefWebPromise = fetch('https://api.reliefweb.int/v1/jobs?appname=strategic-life-dashboard&limit=8&sort[]=date:desc')
       .then((res) => { if (!res.ok) throw new Error('ReliefWeb request failed'); return res.json(); })
       .then((data) => (data.data || []).map((item) => ({
+        id: `reliefweb-${item.id || item.fields?.url || Math.random().toString(36).slice(2)}`,
         title: item.fields?.title || 'ReliefWeb opportunity',
         detail: `ReliefWeb | ${item.fields?.country?.[0]?.name || 'Global'} | ${item.fields?.career_categories?.[0]?.name || 'Professional'}`,
+        company: item.fields?.source?.[0]?.name || 'ReliefWeb',
+        location: item.fields?.country?.[0]?.name || 'Global',
+        contractType: item.fields?.type?.[0]?.name || '',
+        salary: item.fields?.salary || '',
         url: item.fields?.url || 'https://reliefweb.int/jobs',
       })));
 
     const arbeitnowPromise = fetch('https://www.arbeitnow.com/api/job-board-api')
       .then((res) => { if (!res.ok) throw new Error('Arbeitnow request failed'); return res.json(); })
       .then((data) => (data.data || []).slice(0, 8).map((item) => ({
+        id: `arbeitnow-${item.slug || item.url || Math.random().toString(36).slice(2)}`,
         title: item.title || 'Arbeitnow opportunity',
         detail: `Arbeitnow | ${item.company_name || 'Company'} | ${item.location || 'Remote'}`,
+        company: item.company_name || 'Arbeitnow employer',
+        location: item.location || 'Remote',
+        contractType: item.job_types?.[0] || '',
+        salary: item.salary || '',
+        isRemote: /remote/i.test(item.location || ''),
         url: item.url || 'https://www.arbeitnow.com/jobs',
       })));
 
     const remotivePromise = fetch('https://remotive.com/api/remote-jobs?limit=12')
       .then((res) => { if (!res.ok) throw new Error('Remotive request failed'); return res.json(); })
       .then((data) => ((data.jobs || []).slice(0, 8)).map((item) => ({
+        id: `remotive-${item.id || item.url || Math.random().toString(36).slice(2)}`,
         title: item.title || 'Remotive opportunity',
         detail: `Remotive | ${item.company_name || 'Company'} | ${item.candidate_required_location || 'Remote'}`,
+        company: item.company_name || 'Remotive employer',
+        location: item.candidate_required_location || 'Remote',
+        contractType: item.job_type || '',
+        salary: item.salary || '',
+        isRemote: true,
         url: item.url || 'https://remotive.com/remote-jobs',
       })));
 
