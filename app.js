@@ -165,9 +165,14 @@ const DEFAULT_STATE = {
     hazards: [],
     tech: [],
     jobs: [],
-    jobDecisions: {},
     investments: [],
     lastUpdated: null,
+    panelData: {
+      career: { sources: [], parseFailures: 0, parseQuality: 0 },
+      investment: { sources: [], parseFailures: 0, parseQuality: 0 },
+      hazards: { sources: [], parseFailures: 0, parseQuality: 0 },
+      recommendations: { sources: [], parseFailures: 0, parseQuality: 100 },
+    },
   },
   connectors: [
     { name: 'Open-Meteo weather', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
@@ -235,7 +240,10 @@ function hydrateState(parsed = {}) {
     signals: {
       ...clone(DEFAULT_STATE.signals),
       ...(parsed.signals || {}),
-      jobDecisions: { ...clone(DEFAULT_STATE.signals.jobDecisions), ...(parsed.signals?.jobDecisions || {}) },
+      panelData: {
+        ...clone(DEFAULT_STATE.signals.panelData),
+        ...((parsed.signals && parsed.signals.panelData) || {}),
+      },
     },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
     weeklyLoop: { ...clone(DEFAULT_STATE.weeklyLoop), ...(parsed.weeklyLoop || {}) },
@@ -860,6 +868,64 @@ function renderStack(container, items, renderer) {
   items.forEach((item) => container.appendChild(renderer(item)));
 }
 
+function computePanelConfidence(panelData = {}) {
+  const staleHoursThreshold = 24;
+  const sources = Array.isArray(panelData.sources) ? panelData.sources : [];
+  const successfulSources = sources.filter((source) => source?.status === 'fulfilled');
+  const parseFailures = Number(panelData.parseFailures || 0);
+  const parseQuality = clamp(Number(panelData.parseQuality ?? 0), 0, 100);
+  const newestFetchMs = successfulSources.length
+    ? Math.max(...successfulSources.map((source) => new Date(source.fetchedAt || 0).getTime()).filter((value) => Number.isFinite(value)))
+    : 0;
+  const stale = !newestFetchMs || (Date.now() - newestFetchMs) > staleHoursThreshold * 60 * 60 * 1000;
+  const singleSourceOnly = successfulSources.length <= 1;
+
+  const freshnessScore = stale ? 22 : 100;
+  const sourceCountScore = successfulSources.length >= 3 ? 100 : successfulSources.length === 2 ? 74 : successfulSources.length === 1 ? 45 : 12;
+  const parseScore = parseFailures ? Math.max(18, parseQuality - parseFailures * 18) : parseQuality;
+  const score = clamp(round(freshnessScore * 0.4 + sourceCountScore * 0.35 + parseScore * 0.25), 0, 100);
+
+  const badge = score >= 80 ? 'High' : score >= 55 ? 'Medium' : 'Low';
+  const warnings = [];
+  if (stale) warnings.push('stale data');
+  if (singleSourceOnly) warnings.push('single-source only');
+  if (parseFailures > 0) warnings.push('parse failures');
+
+  return { score, badge, warnings, stale, singleSourceOnly, parseFailures };
+}
+
+function formatPanelSourceMeta(panelData = {}) {
+  const sources = Array.isArray(panelData.sources) ? panelData.sources : [];
+  if (!sources.length) return '<p class="muted small">Sources: none yet.</p>';
+  return sources.map((source) => {
+    const ts = source.fetchedAt ? new Date(source.fetchedAt).toLocaleString() : 'n/a';
+    return `<div class="source-row"><span>${source.name || 'Source'}</span><span>${ts}</span></div>`;
+  }).join('');
+}
+
+function renderPanelConfidence(panelName, panelData = {}) {
+  const metaNode = E[`${panelName}PanelMeta`];
+  const warningNode = E[`${panelName}PanelWarning`];
+  if (!metaNode || !warningNode) return;
+
+  const confidence = computePanelConfidence(panelData);
+  metaNode.innerHTML = `
+    <div class="panel-meta-head">
+      <p class="eyebrow">Confidence</p>
+      <span class="panel-confidence-badge confidence-${confidence.badge.toLowerCase()}">${confidence.badge} • ${confidence.score}</span>
+    </div>
+    <div class="panel-source-list">${formatPanelSourceMeta(panelData)}</div>
+  `;
+
+  if (confidence.warnings.length) {
+    warningNode.textContent = `Low confidence warning: ${confidence.warnings.join(', ')}.`;
+    warningNode.classList.remove('hidden');
+  } else {
+    warningNode.textContent = '';
+    warningNode.classList.add('hidden');
+  }
+}
+
 function renderOverview(engine, briefing, changeItems) {
   const directive = getDirective(engine);
   E.primaryDirectiveTitle.textContent = directive.title;
@@ -883,45 +949,7 @@ function renderOverview(engine, briefing, changeItems) {
   renderStack(E.threatList, state.threats, (item) => noteCard({ title: item.title, detail: item.note }, item.severity));
   renderStack(E.opportunityLanes, briefing.topOpps.slice(0, 3), (item) => noteCard({ title: item.title, detail: item.why }, item.type));
   renderStack(E.checkpointList, briefing.checkpoints, (item) => noteCard(item, 'Checkpoint'));
-  renderWeeklyLoop();
-}
-
-function checkpointLabel(checkpoint) {
-  if (!checkpoint.completedAt) return 'Pending';
-  return `Done ${new Date(checkpoint.completedAt).toLocaleDateString()}`;
-}
-
-function renderWeeklyLoop() {
-  const checkpoints = state.weeklyLoop.checkpoints;
-  const rows = [
-    { key: 'mondaySignalReview', label: 'Monday signal review' },
-    { key: 'midweekExecutionCheckpoint', label: 'Midweek execution checkpoint' },
-    { key: 'fridayReflection', label: 'Friday reflection' },
-    { key: 'sundayPlanUpdate', label: 'Sunday plan update' },
-  ];
-  E.weeklyOpsLoop.innerHTML = rows.map((row) => `
-    <div class="weekly-row">
-      <div>
-        <p class="weekly-title">${row.label}</p>
-        <p class="muted small">${checkpointLabel(checkpoints[row.key])}</p>
-      </div>
-      <div class="weekly-actions">
-        <input type="text" class="weekly-note" data-key="${row.key}" placeholder="Notes (optional)" value="${checkpoints[row.key].note || ''}" />
-        <button class="btn btn-secondary weekly-complete" data-key="${row.key}">Mark done</button>
-      </div>
-    </div>
-  `).join('');
-
-  E.weeklyOpsLoop.querySelectorAll('.weekly-complete').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const key = btn.dataset.key;
-      const noteInput = E.weeklyOpsLoop.querySelector(`.weekly-note[data-key="${key}"]`);
-      state.weeklyLoop.checkpoints[key].completedAt = new Date().toISOString();
-      state.weeklyLoop.checkpoints[key].note = noteInput?.value?.trim() || '';
-      saveState();
-      renderAll();
-    });
-  });
+  renderPanelConfidence('recommendations', state.signals.panelData.recommendations);
 }
 
 function renderHorizons(briefing) {
@@ -963,176 +991,7 @@ function renderWealth(engine, briefing) {
 
   E.capitalAllocation.innerHTML = rows.map((row) => `<div class="allocation-row"><p>${row.label}</p><div class="meter"><span style="width:${row.pct}%"></span></div><p>${euros(row.value)}</p></div>`).join('');
   renderStack(E.wealthRecommendations, briefing.wealthRecs, (item) => noteCard(item, 'Wealth'));
-  renderStack(E.marketActionClasses, briefing.marketActions, (item) => noteCard({ title: item.title, detail: item.detail }, item.actionClass));
-  renderStack(
-    E.whyNotBuy,
-    briefing.policySnapshot.whyNotBuyConditions.map((detail) => ({ title: 'Why not buy', detail })),
-    (item) => noteCard(item, 'Constraint'),
-  );
-  if (!briefing.policySnapshot.whyNotBuyConditions.length) {
-    E.whyNotBuy.innerHTML = '';
-    E.whyNotBuy.appendChild(noteCard({ title: 'No hard “why not buy” blockers', detail: 'Constraints are currently satisfied. Keep position sizes incremental to avoid overtrading from feed noise.' }, 'Constraint'));
-  }
-}
-
-function scoreToColor(score) {
-  if (score >= 80) return '#4ade80';
-  if (score >= 65) return '#5eead4';
-  if (score >= 50) return '#fbbf24';
-  return '#fb7185';
-}
-
-function getCountryMapData(locationScores) {
-  return locationScores
-    .map((country) => {
-      const geo = state.locations.countries[country.id];
-      if (!geo) return null;
-      return {
-        ...country,
-        lat: Number(geo.lat),
-        lng: Number(geo.lng),
-        penaltyDrivers: geo.penaltyDrivers || 'No explicit penalty assumptions set.',
-      };
-    })
-    .filter(Boolean);
-}
-
-function computeCityComposite(city) {
-  return clamp(round((100 - Number(city.housingPressure || 0)) * 0.35 + Number(city.safetyProxy || 0) * 0.35 + Number(city.childcareProxy || 0) * 0.3), 0, 100);
-}
-
-function ensureLocationMap() {
-  if (locationMap || !E.locationMap || typeof L === 'undefined') return;
-  locationMap = L.map(E.locationMap).setView([47.2, 4], 3);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 8,
-    attribution: '&copy; OpenStreetMap contributors',
-  }).addTo(locationMap);
-  countryLayer = L.layerGroup().addTo(locationMap);
-  cityLayer = L.layerGroup().addTo(locationMap);
-}
-
-function renderLocationMap(engine) {
-  ensureLocationMap();
-  if (!locationMap || !countryLayer || !cityLayer) return;
-
-  const countryData = getCountryMapData(engine.locationScores);
-  countryLayer.clearLayers();
-  cityLayer.clearLayers();
-
-  countryData.forEach((country) => {
-    L.circleMarker([country.lat, country.lng], {
-      radius: 7 + (country.total / 20),
-      color: scoreToColor(country.total),
-      fillColor: scoreToColor(country.affordability),
-      fillOpacity: 0.68,
-      weight: 2,
-    })
-      .bindTooltip(
-        `<strong>${country.name}</strong><br/>
-        Composite: ${country.total}<br/>
-        Affordability: ${country.affordability}<br/>
-        Family stability: ${country.familyStability}<br/>
-        Upside: ${country.wealthUpside}<br/>
-        Penalty drivers: ${country.penaltyDrivers}`,
-      )
-      .addTo(countryLayer);
-  });
-
-  (state.locations.cityRows || []).forEach((city) => {
-    if (!Number.isFinite(Number(city.lat)) || !Number.isFinite(Number(city.lng))) return;
-    const composite = computeCityComposite(city);
-    L.marker([Number(city.lat), Number(city.lng)])
-      .bindTooltip(
-        `<strong>${city.city || 'Unnamed city'}</strong> (${city.source || 'manual'})<br/>
-        Country: ${COUNTRY_LIBRARY[city.countryId]?.name || city.countryId || 'n/a'}<br/>
-        Composite: ${composite}<br/>
-        Housing pressure proxy: ${Number(city.housingPressure || 0)}<br/>
-        Safety proxy: ${Number(city.safetyProxy || 0)}<br/>
-        Childcare/family proxy: ${Number(city.childcareProxy || 0)}<br/>
-        Commute/airport notes: ${city.commuteAirportNotes || 'n/a'}`,
-      )
-      .addTo(cityLayer);
-  });
-
-  setTimeout(() => locationMap.invalidateSize(), 0);
-}
-
-function renderCountryAssumptionRows(engine) {
-  const countryData = getCountryMapData(engine.locationScores);
-  E.countryMapTable.innerHTML = countryData.map((country) => `
-    <article class="assumption-row">
-      <p><strong>${country.name}</strong> (${country.type})</p>
-      <p class="muted small">Score ${country.total} • Affordability ${country.affordability} • Family ${country.familyStability} • Upside ${country.wealthUpside}</p>
-      <label>Penalty drivers
-        <input type="text" data-country-penalty="${country.id}" value="${country.penaltyDrivers}" />
-      </label>
-    </article>
-  `).join('');
-
-  E.countryMapTable.querySelectorAll('[data-country-penalty]').forEach((input) => {
-    input.addEventListener('change', (event) => {
-      const id = event.target.dataset.countryPenalty;
-      if (!state.locations.countries[id]) state.locations.countries[id] = {};
-      state.locations.countries[id].penaltyDrivers = event.target.value;
-      saveState();
-      renderAll();
-    });
-  });
-}
-
-function renderCityAssumptionRows() {
-  const cityRows = state.locations.cityRows || [];
-  if (!cityRows.length) {
-    E.cityAssumptionRows.innerHTML = '<p class="empty-state">No city rows yet. Add one to model local assumptions.</p>';
-    return;
-  }
-
-  E.cityAssumptionRows.innerHTML = cityRows.map((city, index) => `
-    <article class="assumption-row city-row">
-      <div class="city-grid">
-        <label>City<input type="text" data-city-field="${index}:city" value="${city.city || ''}" /></label>
-        <label>Country
-          <select data-city-field="${index}:countryId">
-            ${Object.keys(COUNTRY_LIBRARY).map((id) => `<option value="${id}" ${city.countryId === id ? 'selected' : ''}>${COUNTRY_LIBRARY[id].name}</option>`).join('')}
-          </select>
-        </label>
-        <label>Source<input type="text" data-city-field="${index}:source" value="${city.source || 'manual'}" /></label>
-        <label>Lat<input type="number" step="0.0001" data-city-field="${index}:lat" value="${city.lat ?? ''}" /></label>
-        <label>Lng<input type="number" step="0.0001" data-city-field="${index}:lng" value="${city.lng ?? ''}" /></label>
-        <label>Housing pressure<input type="number" min="0" max="100" data-city-field="${index}:housingPressure" value="${city.housingPressure ?? 0}" /></label>
-        <label>Safety proxy<input type="number" min="0" max="100" data-city-field="${index}:safetyProxy" value="${city.safetyProxy ?? 0}" /></label>
-        <label>Childcare/family proxy<input type="number" min="0" max="100" data-city-field="${index}:childcareProxy" value="${city.childcareProxy ?? 0}" /></label>
-      </div>
-      <label>Commute / airport access notes
-        <input type="text" data-city-field="${index}:commuteAirportNotes" value="${city.commuteAirportNotes || ''}" />
-      </label>
-      <div class="city-row-actions">
-        <span class="muted small">Composite city score: ${computeCityComposite(city)}</span>
-        <button class="btn btn-secondary" type="button" data-delete-city="${index}">Remove</button>
-      </div>
-    </article>
-  `).join('');
-
-  E.cityAssumptionRows.querySelectorAll('[data-city-field]').forEach((input) => {
-    input.addEventListener('change', (event) => {
-      const [indexRaw, field] = event.target.dataset.cityField.split(':');
-      const index = Number(indexRaw);
-      if (!state.locations.cityRows[index]) return;
-      const numericFields = ['lat', 'lng', 'housingPressure', 'safetyProxy', 'childcareProxy'];
-      state.locations.cityRows[index][field] = numericFields.includes(field) ? Number(event.target.value) : event.target.value;
-      saveState();
-      renderAll();
-    });
-  });
-
-  E.cityAssumptionRows.querySelectorAll('[data-delete-city]').forEach((button) => {
-    button.addEventListener('click', (event) => {
-      state.locations.cityRows.splice(Number(event.target.dataset.deleteCity), 1);
-      saveState();
-      renderAll();
-    });
-  });
+  renderPanelConfidence('investment', state.signals.panelData.investment);
 }
 
 function renderLocation(engine) {
@@ -1162,6 +1021,7 @@ function renderLocation(engine) {
 function renderCareer() {
   renderStack(E.careerLanes, state.careerLanes, (item) => noteCard({ title: item.title, detail: `${item.action} Payoff: ${item.payoff}.` }, `Fit ${item.fit}`));
   const relevantJobs = getRelevantJobs(state);
+  renderPanelConfidence('career', state.signals.panelData.career);
   if (!relevantJobs.length) {
     E.jobWatchlist.innerHTML = '<p class="empty-state">No high-fit jobs after quality filters yet. Feeds auto-refresh daily; click “Load live signals” to rescan now.</p>';
     return;
@@ -1218,6 +1078,7 @@ function renderSignals() {
 
   if (state.signals.hazards.length) renderStack(E.hazardSignal, state.signals.hazards, (item) => noteCard(item, 'NASA EONET'));
   else E.hazardSignal.innerHTML = '<p class="empty-state">No live hazard feed loaded yet.</p>';
+  renderPanelConfidence('hazards', state.signals.panelData.hazards);
 
   if (state.signals.tech.length) renderStack(E.techSignal, state.signals.tech, (item) => noteCard(item, 'Hacker News'));
   else E.techSignal.innerHTML = '<p class="empty-state">No live tech signal loaded yet.</p>';
@@ -1642,6 +1503,22 @@ async function refreshFeeds() {
   E.loadLiveSignals.disabled = true;
 
   try {
+    const panelSources = {
+      career: [],
+      investment: [],
+      hazards: [],
+      recommendations: [],
+    };
+    const markSource = (panel, name, status, itemCount = 0, parseFailures = 0) => {
+      panelSources[panel].push({
+        name,
+        status,
+        itemCount,
+        parseFailures,
+        fetchedAt: new Date().toISOString(),
+      });
+    };
+
     const weatherPromise = fetch('https://api.open-meteo.com/v1/forecast?latitude=50.85&longitude=4.35&current=temperature_2m,weather_code,wind_speed_10m&timezone=Europe%2FBerlin')
       .then((res) => { if (!res.ok) throw new Error('Weather request failed'); return res.json(); })
       .then((data) => ({ city: 'Brussels', temp: round(data.current.temperature_2m), wind: round(data.current.wind_speed_10m), summary: weatherCodeToText(data.current.weather_code) }));
@@ -1730,19 +1607,39 @@ async function refreshFeeds() {
       fearGreedPromise,
     ]);
     if (weatherResult.status === 'fulfilled') state.signals.weather = weatherResult.value;
-    if (hazardResult.status === 'fulfilled') state.signals.hazards = hazardResult.value;
+    if (hazardResult.status === 'fulfilled') {
+      state.signals.hazards = hazardResult.value;
+      markSource('hazards', 'NASA EONET hazards', 'fulfilled', hazardResult.value.length, 0);
+    } else {
+      markSource('hazards', 'NASA EONET hazards', 'rejected', 0, 1);
+    }
     if (techResult.status === 'fulfilled') state.signals.tech = techResult.value;
+    markSource('recommendations', 'Internal strategy engine', 'fulfilled', 1, 0);
     const liveJobs = [
       ...(reliefWebResult.status === 'fulfilled' ? reliefWebResult.value : []),
       ...(arbeitnowResult.status === 'fulfilled' ? arbeitnowResult.value : []),
       ...(remotiveResult.status === 'fulfilled' ? remotiveResult.value : []),
     ];
+    markSource('career', 'ReliefWeb jobs API', reliefWebResult.status, reliefWebResult.status === 'fulfilled' ? reliefWebResult.value.length : 0, reliefWebResult.status === 'fulfilled' ? 0 : 1);
+    markSource('career', 'Arbeitnow jobs API', arbeitnowResult.status, arbeitnowResult.status === 'fulfilled' ? arbeitnowResult.value.length : 0, arbeitnowResult.status === 'fulfilled' ? 0 : 1);
+    markSource('career', 'Remotive jobs API', remotiveResult.status, remotiveResult.status === 'fulfilled' ? remotiveResult.value.length : 0, remotiveResult.status === 'fulfilled' ? 0 : 1);
     state.signals.jobs = liveJobs.slice(0, 14);
     const liveInvestments = [
       ...(marketGainersResult.status === 'fulfilled' ? marketGainersResult.value : []),
       ...(fearGreedResult.status === 'fulfilled' ? fearGreedResult.value : []),
     ];
+    markSource('investment', 'FMP market gainers API', marketGainersResult.status, marketGainersResult.status === 'fulfilled' ? marketGainersResult.value.length : 0, marketGainersResult.status === 'fulfilled' ? 0 : 1);
+    markSource('investment', 'Alternative.me sentiment API', fearGreedResult.status, fearGreedResult.status === 'fulfilled' ? fearGreedResult.value.length : 0, fearGreedResult.status === 'fulfilled' ? 0 : 1);
     state.signals.investments = liveInvestments.slice(0, 8);
+    Object.entries(panelSources).forEach(([panel, sources]) => {
+      const parseFailures = sources.reduce((sum, source) => sum + (source.parseFailures || 0), 0);
+      const fulfilledCount = sources.filter((source) => source.status === 'fulfilled').length;
+      state.signals.panelData[panel] = {
+        sources,
+        parseFailures,
+        parseQuality: fulfilledCount ? round((fulfilledCount / Math.max(sources.length, 1)) * 100) : 0,
+      };
+    });
 
     const feedFailed = (feedId) => (state.signals.meta[feedId]?.status === 'failed');
     Object.values(registryById).forEach((feed) => {
@@ -1810,6 +1707,8 @@ function cacheElements() {
     weekendProtectionScore: document.getElementById('weekend-protection-score'),
 
     todayActions: document.getElementById('today-actions'),
+    recommendationsPanelMeta: document.getElementById('recommendations-panel-meta'),
+    recommendationsPanelWarning: document.getElementById('recommendations-panel-warning'),
     whyNow: document.getElementById('why-now'),
     whatChanged: document.getElementById('what-changed'),
     threatList: document.getElementById('threat-list'),
@@ -1828,8 +1727,8 @@ function cacheElements() {
     assetMeter: document.getElementById('asset-meter'),
     capitalAllocation: document.getElementById('capital-allocation'),
     wealthRecommendations: document.getElementById('wealth-recommendations'),
-    marketActionClasses: document.getElementById('market-action-classes'),
-    whyNotBuy: document.getElementById('why-not-buy'),
+    investmentPanelMeta: document.getElementById('investment-panel-meta'),
+    investmentPanelWarning: document.getElementById('investment-panel-warning'),
 
     countryComparison: document.getElementById('country-comparison'),
     locationRecommendation: document.getElementById('location-recommendation'),
@@ -1840,6 +1739,8 @@ function cacheElements() {
 
     careerLanes: document.getElementById('career-lanes'),
     jobWatchlist: document.getElementById('job-watchlist'),
+    careerPanelMeta: document.getElementById('career-panel-meta'),
+    careerPanelWarning: document.getElementById('career-panel-warning'),
 
     runwayMonths: document.getElementById('runway-months'),
     spousePotential: document.getElementById('spouse-potential'),
@@ -1853,6 +1754,8 @@ function cacheElements() {
 
     weatherSignal: document.getElementById('weather-signal'),
     hazardSignal: document.getElementById('hazard-signal'),
+    hazardsPanelMeta: document.getElementById('hazards-panel-meta'),
+    hazardsPanelWarning: document.getElementById('hazards-panel-warning'),
     techSignal: document.getElementById('tech-signal'),
     feedHealth: document.getElementById('feed-health'),
     connectorStatus: document.getElementById('connector-status'),
