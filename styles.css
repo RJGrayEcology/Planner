@@ -377,8 +377,8 @@ a { color: inherit; }
   margin: 0 0 4px;
 }
 
-.rec-meta,
-.rec-description,
+.rec-action,
+.rec-impact,
 .rec-footer,
 .note-card p,
 .country-meta,
@@ -388,7 +388,7 @@ a { color: inherit; }
   margin: 0;
 }
 
-.rec-meta,
+.rec-action,
 .country-meta,
 .connector-card p,
 .lane-card p,
@@ -398,7 +398,7 @@ a { color: inherit; }
   font-size: 0.86rem;
 }
 
-.rec-description {
+.rec-impact {
   margin-top: 10px;
   line-height: 1.55;
   color: #dce7f7;
@@ -418,6 +418,20 @@ a { color: inherit; }
   background: rgba(255,255,255,0.05);
   padding: 5px 9px;
   border-radius: 999px;
+}
+
+.rec-section {
+  margin-top: 10px;
+}
+
+.rec-section p {
+  margin: 8px 0 0;
+}
+
+.rec-evidence {
+  margin: 8px 0 0 18px;
+  padding: 0;
+  color: #dce7f7;
 }
 
 .confidence-pill {
@@ -551,6 +565,7 @@ a { color: inherit; }
 .status-live { background: rgba(74, 222, 128, 0.14); color: var(--success); }
 .status-mock { background: rgba(251, 191, 36, 0.14); color: var(--warn); }
 .status-planned { background: rgba(148, 163, 184, 0.14); color: #d1d5db; }
+.stale-warning { color: #fbbf24; font-weight: 700; }
 
 .form-grid {
   display: grid;

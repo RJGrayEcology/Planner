@@ -361,6 +361,16 @@
         <div class="card mt-lg">
           <div class="card-header">
             <div>
+              <p class="eyebrow">Reliability</p>
+              <h3>Feed Health</h3>
+            </div>
+          </div>
+          <div id="feed-health" class="connector-grid"></div>
+        </div>
+
+        <div class="card mt-lg">
+          <div class="card-header">
+            <div>
               <p class="eyebrow">Connector map</p>
               <h3>Live connector readiness</h3>
             </div>
@@ -420,15 +430,29 @@
       <div class="rec-top">
         <div>
           <p class="rec-title"></p>
-          <p class="rec-meta"></p>
+          <p class="rec-action"></p>
         </div>
         <span class="confidence-pill"></span>
       </div>
-      <p class="rec-description"></p>
+      <p class="rec-impact"></p>
       <div class="rec-footer">
-        <span class="rec-payoff"></span>
-        <span class="rec-risk"></span>
-        <span class="rec-time"></span>
+        <span>Urgency: <strong class="rec-urgency"></strong></span>
+      </div>
+      <div class="rec-section">
+        <p class="note-kicker">What changed</p>
+        <p class="rec-what-changed"></p>
+      </div>
+      <div class="rec-section">
+        <p class="note-kicker">Why now</p>
+        <p class="rec-why-now"></p>
+      </div>
+      <div class="rec-section">
+        <p class="note-kicker">Evidence</p>
+        <ul class="rec-evidence"></ul>
+      </div>
+      <div class="rec-section">
+        <p class="note-kicker">Next review</p>
+        <p class="rec-review"></p>
       </div>
     </article>
   </template>
