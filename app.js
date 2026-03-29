@@ -179,42 +179,16 @@ const DEFAULT_STATE = {
     { name: 'FMP market gainers API', type: 'API', status: 'live', note: 'Daily market momentum scan for investment radar.' },
     { name: 'Alternative.me sentiment API', type: 'API', status: 'live', note: 'Live fear & greed signal for risk pacing.' },
   ],
-  locations: {
-    countries: {
-      belgium: { lat: 50.8503, lng: 4.3517, penaltyDrivers: 'Housing pressure in Brussels, tax complexity, dual-language admin overhead.' },
-      france: { lat: 48.8566, lng: 2.3522, penaltyDrivers: 'Metro rent pressure, bureaucracy friction, variable regional wage acceleration.' },
-      'united-states': { lat: 38.9072, lng: -77.0369, penaltyDrivers: 'Healthcare volatility, childcare costs, and uneven safety by metro.' },
-      netherlands: { lat: 52.3676, lng: 4.9041, penaltyDrivers: 'Housing supply constraints and high rent-to-income ratios in major hubs.' },
-      canada: { lat: 45.4215, lng: -75.6972, penaltyDrivers: 'Housing cost inflation in top metros and long winter utility burden.' },
-      germany: { lat: 52.52, lng: 13.405, penaltyDrivers: 'Tax and compliance complexity plus language ramp in key sectors.' },
-      portugal: { lat: 38.7223, lng: -9.1393, penaltyDrivers: 'Lower salary ceiling and increased property demand in popular cities.' },
-      switzerland: { lat: 46.948, lng: 7.4474, penaltyDrivers: 'High cost of living, childcare costs, and tight housing supply.' },
-    },
-    cityRows: [
-      {
-        id: 'brussels-belgium',
-        countryId: 'belgium',
-        city: 'Brussels',
-        source: 'manual',
-        lat: 50.8503,
-        lng: 4.3517,
-        housingPressure: 68,
-        safetyProxy: 74,
-        childcareProxy: 77,
-        commuteAirportNotes: 'Dense transit + direct BRU access. Some districts show higher rent pressure.',
-      },
-      {
-        id: 'lyon-france',
-        countryId: 'france',
-        city: 'Lyon',
-        source: 'manual',
-        lat: 45.764,
-        lng: 4.8357,
-        housingPressure: 60,
-        safetyProxy: 70,
-        childcareProxy: 73,
-        commuteAirportNotes: 'Strong train links and airport access. Commute quality depends on arrondissement.',
-      },
+  portfolioPolicy: {
+    emergencyFloorMonths: 12,
+    runwayTargetMonths: 18,
+    houseFundProtectionThreshold: 0.65,
+    maxRiskAllocationUnderRunwayTarget: 0.25,
+    monthlyInvestableBands: [
+      { max: 399, label: 'stability-first', riskAllocation: 0.1 },
+      { max: 899, label: 'balanced', riskAllocation: 0.18 },
+      { max: 1799, label: 'progressive', riskAllocation: 0.28 },
+      { max: null, label: 'accelerated', riskAllocation: 0.38 },
     ],
   },
   meta: { lastEngine: null, lastSavedAt: null },
@@ -252,12 +226,7 @@ function hydrateState(parsed = {}) {
       jobDecisions: { ...clone(DEFAULT_STATE.signals.jobDecisions), ...(parsed.signals?.jobDecisions || {}) },
     },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
-    locations: {
-      ...clone(DEFAULT_STATE.locations),
-      ...(parsed.locations || {}),
-      countries: { ...clone(DEFAULT_STATE.locations.countries), ...((parsed.locations || {}).countries || {}) },
-      cityRows: Array.isArray((parsed.locations || {}).cityRows) ? parsed.locations.cityRows : clone(DEFAULT_STATE.locations.cityRows),
-    },
+    portfolioPolicy: { ...clone(DEFAULT_STATE.portfolioPolicy), ...(parsed.portfolioPolicy || {}) },
     meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
   };
 
@@ -646,8 +615,8 @@ function generateBriefing(stateRef, engine) {
   const staleHours = stateRef.signals.lastUpdated
     ? round((Date.now() - new Date(stateRef.signals.lastUpdated).getTime()) / (1000 * 60 * 60))
     : null;
-  const drivers = computeDrivers(engine, { ...stateRef.signals, relevantJobs }, stateRef.profile);
-  const rankedRecommendations = rankRecommendations(drivers);
+  const policySnapshot = buildPortfolioPolicySnapshot(stateRef, engine);
+  const marketActions = classifyMarketFeedToActionClasses(stateRef.signals.investments, policySnapshot);
 
   return {
     today: rankedRecommendations,
@@ -669,9 +638,7 @@ function generateBriefing(stateRef, engine) {
       { title: 'Home fund path', detail: `Progress toward ${euros(stateRef.profile.targetHouseFund)} in ${stateRef.profile.homeGoalYears} years remains visible.` },
     ],
     wealthRecs: [
-      { title: 'Increase automated investing when surplus remains positive for 3 months', detail: 'Use stability trigger rules instead of emotional timing.' },
-      { title: 'Protect safety cash from house allocation drift', detail: 'Never compromise emergency runway for faster down-payment optics.' },
-      { title: liveInvestment ? `Live investment watch: ${liveInvestment.title}` : 'No live investment feed item yet', detail: liveInvestment ? liveInvestment.detail : 'Load live signals to pull daily market momentum and risk sentiment inputs.' },
+      ...buildConstraintFirstRecommendations(policySnapshot, marketActions, liveInvestment),
     ],
     familyRecs: [
       { title: 'Codify a weekend recovery protocol', detail: 'Pre-define low-energy tasks and a hard stop time for Saturday/Sunday.' },
@@ -696,7 +663,100 @@ function generateBriefing(stateRef, engine) {
         kicker: 'Live investment feed',
       })),
     ),
+    policySnapshot,
+    marketActions,
   };
+}
+
+function buildPortfolioPolicySnapshot(stateRef, engine) {
+  const policy = stateRef.portfolioPolicy;
+  const burn = stateRef.profile.essentialCosts + stateRef.profile.strategicSpending;
+  const emergencyFloorAmount = burn * policy.emergencyFloorMonths;
+  const runwayTargetAmount = burn * policy.runwayTargetMonths;
+  const houseFundTargetProtected = stateRef.profile.targetHouseFund * policy.houseFundProtectionThreshold;
+  const investableBand = policy.monthlyInvestableBands.find((band) => band.max === null || engine.investableSurplus <= band.max) || policy.monthlyInvestableBands[0];
+  const riskCapFromRunway = engine.runway < policy.runwayTargetMonths ? policy.maxRiskAllocationUnderRunwayTarget : investableBand.riskAllocation;
+  const effectiveRiskAllocationCap = Math.min(investableBand.riskAllocation, riskCapFromRunway);
+  const houseCoverageRatio = stateRef.profile.targetHouseFund ? engine.houseProjection / stateRef.profile.targetHouseFund : 0;
+  const whyNotBuyConditions = [
+    engine.runway < policy.emergencyFloorMonths ? `Runway is ${round(engine.runway)} months, below emergency floor of ${policy.emergencyFloorMonths} months.` : null,
+    houseCoverageRatio < policy.houseFundProtectionThreshold ? `House-fund projection is ${round(houseCoverageRatio * 100)}%, below protection threshold of ${round(policy.houseFundProtectionThreshold * 100)}%.` : null,
+    engine.investableSurplus < 200 ? 'Monthly investable surplus is too thin for reliable risk adds this month.' : null,
+  ].filter(Boolean);
+
+  return {
+    emergencyFloorAmount,
+    runwayTargetAmount,
+    houseFundTargetProtected,
+    investableBand,
+    effectiveRiskAllocationCap,
+    isRunwayBelowEmergencyFloor: engine.runway < policy.emergencyFloorMonths,
+    isRunwayBelowTarget: engine.runway < policy.runwayTargetMonths,
+    isHouseFundUnderProtection: houseCoverageRatio < policy.houseFundProtectionThreshold,
+    whyNotBuyConditions,
+  };
+}
+
+function classifyMarketFeedToActionClasses(investments = [], policySnapshot) {
+  return investments.slice(0, 6).map((item) => {
+    const blob = `${item.title} ${item.detail}`.toLowerCase();
+    if (blob.includes('fear & greed')) {
+      const fearMatch = item.title.match(/Fear & Greed:\s*(\d+)/i);
+      const score = fearMatch ? Number(fearMatch[1]) : null;
+      if (score !== null && score < 35) {
+        return {
+          actionClass: policySnapshot.whyNotBuyConditions.length ? 'defer risk' : 'deploy incremental capital',
+          title: item.title,
+          detail: score < 20 ? 'Sentiment is very fearful; only deploy if constraints are already satisfied.' : 'Fear is elevated; scale in small tranches only if personal guardrails are green.',
+        };
+      }
+      if (score !== null && score > 70) {
+        return { actionClass: 'rebalance', title: item.title, detail: 'Greed is elevated; trim concentration and rebalance to target weights.' };
+      }
+      return { actionClass: 'watch', title: item.title, detail: 'Neutral sentiment; observe but avoid forcing trades from noise.' };
+    }
+
+    if (policySnapshot.whyNotBuyConditions.length) {
+      return { actionClass: 'defer risk', title: item.title, detail: 'Signal noted, but personal constraints currently block new risk deployment.' };
+    }
+
+    return { actionClass: 'deploy incremental capital', title: item.title, detail: `Eligible for a staged buy plan up to ${round(policySnapshot.effectiveRiskAllocationCap * 100)}% of monthly investable amount.` };
+  });
+}
+
+function buildConstraintFirstRecommendations(policySnapshot, marketActions, liveInvestment) {
+  const recommendations = [];
+  if (policySnapshot.isRunwayBelowEmergencyFloor) {
+    recommendations.push({
+      title: 'Restore emergency floor before new risk',
+      detail: `Cash floor is under policy. Route surplus to liquidity until ${euros(policySnapshot.emergencyFloorAmount)} is secured.`,
+    });
+  } else if (policySnapshot.isHouseFundUnderProtection) {
+    recommendations.push({
+      title: 'Protect house fund threshold first',
+      detail: `House objective is below protected threshold (${euros(policySnapshot.houseFundTargetProtected)}). Keep risk adds secondary.`,
+    });
+  } else {
+    recommendations.push({
+      title: 'Constraints satisfied: controlled risk deployment allowed',
+      detail: `Current band is "${policySnapshot.investableBand.label}" with max risk pace ${round(policySnapshot.effectiveRiskAllocationCap * 100)}% of monthly investable cash.`,
+    });
+  }
+
+  const prioritizedAction = marketActions.find((item) => item.actionClass !== 'watch') || marketActions[0];
+  recommendations.push({
+    title: prioritizedAction ? `Market action class: ${prioritizedAction.actionClass}` : 'No classified market action yet',
+    detail: prioritizedAction ? `${prioritizedAction.title} — ${prioritizedAction.detail}` : (liveInvestment ? liveInvestment.detail : 'Load live signals to classify market inputs into actions.'),
+  });
+
+  recommendations.push({
+    title: 'Why not buy guardrails',
+    detail: policySnapshot.whyNotBuyConditions.length
+      ? policySnapshot.whyNotBuyConditions.join(' ')
+      : 'No hard blockers detected. Continue with incremental sizing, not lump-sum reactions.',
+  });
+
+  return recommendations;
 }
 
 function getDirective(engine) {
@@ -824,6 +884,16 @@ function renderWealth(engine, briefing) {
 
   E.capitalAllocation.innerHTML = rows.map((row) => `<div class="allocation-row"><p>${row.label}</p><div class="meter"><span style="width:${row.pct}%"></span></div><p>${euros(row.value)}</p></div>`).join('');
   renderStack(E.wealthRecommendations, briefing.wealthRecs, (item) => noteCard(item, 'Wealth'));
+  renderStack(E.marketActionClasses, briefing.marketActions, (item) => noteCard({ title: item.title, detail: item.detail }, item.actionClass));
+  renderStack(
+    E.whyNotBuy,
+    briefing.policySnapshot.whyNotBuyConditions.map((detail) => ({ title: 'Why not buy', detail })),
+    (item) => noteCard(item, 'Constraint'),
+  );
+  if (!briefing.policySnapshot.whyNotBuyConditions.length) {
+    E.whyNotBuy.innerHTML = '';
+    E.whyNotBuy.appendChild(noteCard({ title: 'No hard “why not buy” blockers', detail: 'Constraints are currently satisfied. Keep position sizes incremental to avoid overtrading from feed noise.' }, 'Constraint'));
+  }
 }
 
 function scoreToColor(score) {
@@ -1599,6 +1669,8 @@ function cacheElements() {
     assetMeter: document.getElementById('asset-meter'),
     capitalAllocation: document.getElementById('capital-allocation'),
     wealthRecommendations: document.getElementById('wealth-recommendations'),
+    marketActionClasses: document.getElementById('market-action-classes'),
+    whyNotBuy: document.getElementById('why-not-buy'),
 
     countryComparison: document.getElementById('country-comparison'),
     locationRecommendation: document.getElementById('location-recommendation'),
