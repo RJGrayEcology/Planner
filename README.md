@@ -1,53 +1,50 @@
 # Strategic Life Intelligence Dashboard
 
-A static GitHub Pages friendly prototype built with plain HTML, CSS, and JavaScript.
+Static GitHub Pages dashboard (HTML/CSS/JS) for personal strategic planning.
 
-## What it does
+## What is live vs static
 
-- Runs as a private command-center dashboard for long-horizon life strategy.
-- Uses editable local settings for income, savings, family planning, and weighted priorities.
-- Produces recommendations across day/week/month/year/5-year/10-year horizons.
-- Includes stronger scoring for:
-  - wealth compounding
-  - household resilience
-  - family readiness
-  - career leverage
-  - weekend protection
-- Includes a richer location model anchored on Belgium, France, US + 2 optional comparison countries.
-- Includes dedicated modules for:
-  - Family Readiness
-  - Career / Consultancy Watch
-  - Opportunity Radar
-  - Location & Stability comparison
-- Shows "what changed" and "why now" logic in the command center.
-- Uses adaptive recommendations that react to weakest scoring areas and live feed freshness.
-- Stores state locally with import/export JSON support and save timestamp visibility.
-- Includes live client-side signal loading for:
-  - Open-Meteo weather
-  - NASA EONET natural events
-  - Hacker News top stories
-  - ReliefWeb jobs API
-  - Arbeitnow jobs API
-  - RemoteOK jobs API
-  - Financial Modeling Prep gainers feed
-  - Alternative.me fear & greed feed
-- Live feeds auto-refresh daily (and can be manually refreshed immediately).
+### Live feeds (client-side, no backend)
+The app fetches live data from these open sources:
+- Open-Meteo (Brussels weather)
+- NASA EONET (active natural events)
+- Hacker News API (top technical chatter)
+- ReliefWeb Jobs API
+- Arbeitnow Jobs API
+- Remotive Jobs API
+- Financial Modeling Prep (market gainers, demo endpoint)
+- Alternative.me Fear & Greed index
 
-## Deploy to GitHub Pages
+### Static/seeded inputs
+These remain editable seeded planning inputs:
+- personal profile + weights
+- long-horizon goals
+- country scoring assumptions
+- opportunity lane definitions
 
-### Option 1: simplest
-1. Create a new GitHub repository.
-2. Upload these files to the root of the repository.
-3. In GitHub, go to **Settings > Pages**.
-4. Under **Build and deployment**, choose **Deploy from a branch**.
-5. Select your main branch and `/root` folder.
-6. Save.
+## How recommendations are generated
 
-### Option 2: docs folder
-If you want to keep site files in `/docs`, move `index.html`, `styles.css`, and `app.js` there, then configure Pages to deploy from `/docs`.
+Recommendations are **adaptive**, not fixed text:
+1. The engine computes current scores (wealth, resilience, career leverage, family, location, weekend protection).
+2. It detects the weakest area.
+3. It injects latest live feeds (high-fit jobs + investment signals) into:
+   - daily actions
+   - why-now logic
+   - wealth recommendations
+   - opportunity radar
+4. Career Watch filters live jobs by relevance to your high-fit lanes (analyst/intelligence/OSINT/risk/conservation style signals).
 
-## Notes
+## Refresh behavior
 
-- This remains intentionally static for GitHub Pages compatibility.
-- For protected APIs, alerting automation, RSS normalization, and robust page-watchers, a future backend/serverless layer is recommended.
-- Country and opportunity values are seeded planning assumptions, meant for structured thinking rather than authoritative external truth.
+- Manual refresh: **Load live signals** button.
+- Automatic refresh: on page load if feeds are stale, then hourly checks; fetch runs when data age > 24 hours.
+- Last refresh timestamp is stored in local state.
+
+## Storage
+
+Everything is local browser storage (`localStorage`): profile, weights, computed snapshots, and fetched feed payloads.
+Import/export JSON is supported.
+
+## Deploy
+
+Upload `index.html`, `styles.css`, `app.js` to repo root (or `/docs`) and enable GitHub Pages.

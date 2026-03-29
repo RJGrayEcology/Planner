@@ -146,7 +146,7 @@ const DEFAULT_STATE = {
     { name: 'Hacker News API', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
     { name: 'ReliefWeb jobs API', type: 'API', status: 'live', note: 'Live humanitarian and consultancy opportunities.' },
     { name: 'Arbeitnow jobs API', type: 'API', status: 'live', note: 'Live remote/international role stream.' },
-    { name: 'RemoteOK jobs API', type: 'API', status: 'live', note: 'Live remote opportunity stream for analyst/consultancy-adjacent roles.' },
+    { name: 'Remotive jobs API', type: 'API', status: 'live', note: 'Live remote opportunity stream for analyst/consultancy-adjacent roles.' },
     { name: 'FMP market gainers API', type: 'API', status: 'live', note: 'Daily market momentum scan for investment radar.' },
     { name: 'Alternative.me sentiment API', type: 'API', status: 'live', note: 'Live fear & greed signal for risk pacing.' },
   ],
@@ -318,12 +318,35 @@ function computeChanges(currentEngine, previousEngine) {
   return changes.length ? changes : [{ label: 'No major score shifts', detail: 'Your strategic baseline is stable since the last save.' }];
 }
 
+function getRelevantJobs(stateRef) {
+  const baseKeywords = [
+    'analyst', 'intelligence', 'osint', 'monitoring', 'risk', 'investigation',
+    'conservation', 'wildlife', 'illicit', 'policy', 'research', 'security',
+    'europol', 'interpol', 'ai', 'remote',
+  ];
+  const laneKeywords = stateRef.careerLanes
+    .flatMap((lane) => `${lane.title} ${lane.action}`.toLowerCase().split(/[^a-z0-9]+/g))
+    .filter((word) => word.length > 3);
+  const keywords = [...new Set([...baseKeywords, ...laneKeywords])];
+
+  return stateRef.signals.jobs
+    .map((job) => {
+      const haystack = `${job.title} ${job.detail}`.toLowerCase();
+      const score = keywords.reduce((acc, keyword) => (haystack.includes(keyword) ? acc + 1 : acc), 0);
+      return { ...job, relevance: score };
+    })
+    .filter((job) => job.relevance >= 2)
+    .sort((a, b) => b.relevance - a.relevance)
+    .slice(0, 10);
+}
+
 function generateBriefing(stateRef, engine) {
   const topOpps = clone(stateRef.opportunities)
     .sort((a, b) => (b.fit * 0.58 + b.upside * 0.42) - (a.fit * 0.58 + a.upside * 0.42));
 
   const weekendMode = stateRef.profile.weekendBurnout >= 65;
-  const liveJob = stateRef.signals.jobs[0];
+  const relevantJobs = getRelevantJobs(stateRef);
+  const liveJob = relevantJobs[0];
   const liveInvestment = stateRef.signals.investments[0];
   const weakestArea = [
     { key: 'wealth', score: engine.wealthScore },
@@ -382,9 +405,9 @@ function generateBriefing(stateRef, engine) {
       detail: `${opp.why} Score ${round(opp.fit * 0.58 + opp.upside * 0.42)}/100.`,
       kicker: `${index + 1} • ${opp.type}`,
     })).concat(
-      stateRef.signals.jobs.slice(0, 2).map((job, index) => ({
+      relevantJobs.slice(0, 2).map((job, index) => ({
         title: `Live role ${index + 1}: ${job.title}`,
-        detail: job.detail,
+        detail: `${job.detail} | Relevance ${job.relevance}`,
         kicker: 'Live jobs feed',
       })),
     ).concat(
@@ -536,15 +559,17 @@ function renderLocation(engine) {
 
 function renderCareer() {
   renderStack(E.careerLanes, state.careerLanes, (item) => noteCard({ title: item.title, detail: `${item.action} Payoff: ${item.payoff}.` }, `Fit ${item.fit}`));
-  if (!state.signals.jobs.length) {
-    E.jobWatchlist.innerHTML = '<p class="empty-state">Live jobs will auto-refresh daily. Use “Load live signals” for an immediate refresh.</p>';
+  const relevantJobs = getRelevantJobs(state);
+  if (!relevantJobs.length) {
+    E.jobWatchlist.innerHTML = '<p class="empty-state">No high-fit live jobs found yet. Feeds auto-refresh daily; click “Load live signals” to rescan now.</p>';
     return;
   }
 
-  E.jobWatchlist.innerHTML = state.signals.jobs.slice(0, 8).map((item) => `
+  E.jobWatchlist.innerHTML = relevantJobs.slice(0, 8).map((item) => `
     <article class="note-card">
       <h4><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a></h4>
       <p>${item.detail}</p>
+      <p class="note-meta">High-fit relevance: ${item.relevance}</p>
     </article>
   `).join('');
 }
@@ -755,12 +780,12 @@ async function loadLiveSignals() {
         url: item.url || 'https://www.arbeitnow.com/jobs',
       })));
 
-    const remoteOkPromise = fetch('https://remoteok.com/api')
-      .then((res) => { if (!res.ok) throw new Error('RemoteOK request failed'); return res.json(); })
-      .then((data) => (Array.isArray(data) ? data.slice(1, 9) : []).map((item) => ({
-        title: item.position || 'RemoteOK opportunity',
-        detail: `RemoteOK | ${item.company || 'Company'} | ${item.location || 'Remote'}`,
-        url: item.url ? `https://remoteok.com${item.url}` : 'https://remoteok.com/',
+    const remotivePromise = fetch('https://remotive.com/api/remote-jobs?limit=12')
+      .then((res) => { if (!res.ok) throw new Error('Remotive request failed'); return res.json(); })
+      .then((data) => ((data.jobs || []).slice(0, 8)).map((item) => ({
+        title: item.title || 'Remotive opportunity',
+        detail: `Remotive | ${item.company_name || 'Company'} | ${item.candidate_required_location || 'Remote'}`,
+        url: item.url || 'https://remotive.com/remote-jobs',
       })));
 
     const marketGainersPromise = fetch('https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey=demo')
@@ -781,13 +806,13 @@ async function loadLiveSignals() {
         }];
       });
 
-    const [weatherResult, hazardResult, techResult, reliefWebResult, arbeitnowResult, remoteOkResult, marketGainersResult, fearGreedResult] = await Promise.allSettled([
+    const [weatherResult, hazardResult, techResult, reliefWebResult, arbeitnowResult, remotiveResult, marketGainersResult, fearGreedResult] = await Promise.allSettled([
       weatherPromise,
       hazardPromise,
       techPromise,
       reliefWebPromise,
       arbeitnowPromise,
-      remoteOkPromise,
+      remotivePromise,
       marketGainersPromise,
       fearGreedPromise,
     ]);
@@ -797,7 +822,7 @@ async function loadLiveSignals() {
     const liveJobs = [
       ...(reliefWebResult.status === 'fulfilled' ? reliefWebResult.value : []),
       ...(arbeitnowResult.status === 'fulfilled' ? arbeitnowResult.value : []),
-      ...(remoteOkResult.status === 'fulfilled' ? remoteOkResult.value : []),
+      ...(remotiveResult.status === 'fulfilled' ? remotiveResult.value : []),
     ];
     state.signals.jobs = liveJobs.slice(0, 14);
     const liveInvestments = [
