@@ -192,6 +192,17 @@ const DEFAULT_STATE = {
     ],
   },
   meta: { lastEngine: null, lastSavedAt: null },
+  scenarioLab: {
+    assumptions: {
+      salaryDeltaPct: 0,
+      spouseActivationMonths: 12,
+      childCostDelta: 350,
+      housingPriceShockPct: 0,
+      housingRateShockPct: 0,
+      relocationCountryId: 'belgium',
+    },
+    saved: [],
+  },
 };
 
 const E = {};
@@ -228,6 +239,10 @@ function hydrateState(parsed = {}) {
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
     portfolioPolicy: { ...clone(DEFAULT_STATE.portfolioPolicy), ...(parsed.portfolioPolicy || {}) },
     meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
+    scenarioLab: {
+      assumptions: { ...clone(DEFAULT_STATE.scenarioLab.assumptions), ...(parsed.scenarioLab?.assumptions || {}) },
+      saved: Array.isArray(parsed.scenarioLab?.saved) ? parsed.scenarioLab.saved : clone(DEFAULT_STATE.scenarioLab.saved),
+    },
   };
 
   merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
@@ -289,6 +304,50 @@ function computeCountryScores(country, normalizedWeights, profile) {
     housingStressPenalty: round(housingStressPenalty),
     total,
   };
+}
+
+function strategicPostureFromMetrics(scenario) {
+  if (scenario.runwayFloorMonths < 9 || scenario.houseFundProbabilityBand === 'Low') return 'Defensive: preserve cash, reduce optional burn, delay major commitments.';
+  if (scenario.houseFundProbabilityBand === 'High' && scenario.outcomes.y10 >= scenario.outcomes.y5 * 1.7) return 'Offensive: accelerate investing, lock in high-upside career and location moves.';
+  return 'Balanced: keep steady contributions, test spouse-income ramp, and stage housing timing.';
+}
+
+function computeScenarioOutcome(stateRef, assumptions, name = 'Scenario') {
+  const profile = stateRef.profile;
+  const relocationCountry = COUNTRY_LIBRARY[assumptions.relocationCountryId] || COUNTRY_LIBRARY.belgium;
+  const relocatedEssentials = profile.essentialCosts * (1 + (55 - relocationCountry.affordability) / 240);
+  const adjustedNetIncome = profile.netIncome * (1 + assumptions.salaryDeltaPct / 100);
+  const adjustedEssentials = Math.max(0, relocatedEssentials + assumptions.childCostDelta);
+  const monthlyRate = (profile.expectedReturnPct / 100) / 12;
+  let assets = profile.cashSavings + profile.investments;
+  let runwayFloorMonths = Number.POSITIVE_INFINITY;
+  const yearlyOutcomes = {};
+
+  for (let month = 1; month <= 120; month += 1) {
+    const spouseIncome = month > assumptions.spouseActivationMonths ? profile.spouseIncomeTarget : 0;
+    const monthlySurplus = adjustedNetIncome + spouseIncome - adjustedEssentials - profile.strategicSpending;
+    assets = assets * (1 + monthlyRate) + monthlySurplus;
+    const burn = Math.max(adjustedEssentials + profile.strategicSpending - spouseIncome, 1);
+    runwayFloorMonths = Math.min(runwayFloorMonths, assets / burn);
+    if (month === 12) yearlyOutcomes.y1 = assets;
+    if (month === 60) yearlyOutcomes.y5 = assets;
+    if (month === 120) yearlyOutcomes.y10 = assets;
+  }
+
+  const adjustedTargetHouse = profile.targetHouseFund * (1 + assumptions.housingPriceShockPct / 100) * (1 + assumptions.housingRateShockPct / 250);
+  const houseCoverage = yearlyOutcomes.y5 / Math.max(adjustedTargetHouse, 1);
+  const houseFundProbabilityBand = houseCoverage >= 1.15 ? 'High' : houseCoverage >= 0.85 ? 'Medium' : 'Low';
+
+  const scenario = {
+    name,
+    assumptions: clone(assumptions),
+    relocationCountry: relocationCountry.name,
+    outcomes: yearlyOutcomes,
+    runwayFloorMonths: Math.max(0, runwayFloorMonths),
+    houseFundProbabilityBand,
+  };
+  scenario.strategicPosture = strategicPostureFromMetrics(scenario);
+  return scenario;
 }
 
 function computeEngine(stateRef) {
@@ -1175,6 +1234,59 @@ function renderSignals() {
   E.connectorStatus.innerHTML = state.connectors.map((item) => `<article class="connector-card"><h4>${item.name}</h4><p>${item.type}</p><p>${item.note}</p><span class="status ${item.status === 'live' ? 'status-live' : item.status === 'mock' ? 'status-mock' : 'status-planned'}">${item.status}</span></article>`).join('');
 }
 
+function renderScenarioLab() {
+  const assumptions = state.scenarioLab.assumptions;
+  Object.entries(assumptions).forEach(([key, value]) => {
+    const input = E.scenarioForm.elements.namedItem(key);
+    if (input) input.value = value;
+  });
+
+  const active = computeScenarioOutcome(state, assumptions, 'Current scenario');
+  E.scenarioOutcomeCards.innerHTML = `
+    <article class="note-card"><h4>1 year</h4><p>${euros(active.outcomes.y1)}</p></article>
+    <article class="note-card"><h4>5 years</h4><p>${euros(active.outcomes.y5)}</p></article>
+    <article class="note-card"><h4>10 years</h4><p>${euros(active.outcomes.y10)}</p></article>
+    <article class="note-card"><h4>Runway floor</h4><p>${active.runwayFloorMonths.toFixed(1)} months</p></article>
+    <article class="note-card"><h4>House-fund probability</h4><p>${active.houseFundProbabilityBand}</p></article>
+    <article class="note-card"><h4>Recommended posture</h4><p>${active.strategicPosture}</p></article>
+  `;
+
+  const baseline = computeScenarioOutcome(state, clone(DEFAULT_STATE.scenarioLab.assumptions), 'Baseline');
+  const scenarios = [baseline, ...state.scenarioLab.saved];
+  E.scenarioComparison.innerHTML = `
+    <table class="scenario-table">
+      <thead>
+        <tr>
+          <th>Scenario</th><th>Relocation</th><th>1y</th><th>5y</th><th>10y</th><th>Runway floor</th><th>House band</th><th>Posture</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${scenarios.map((scenario, index) => `
+          <tr>
+            <td>${scenario.name}</td>
+            <td>${scenario.relocationCountry}</td>
+            <td>${euros(scenario.outcomes.y1)}</td>
+            <td>${euros(scenario.outcomes.y5)}</td>
+            <td>${euros(scenario.outcomes.y10)}</td>
+            <td>${scenario.runwayFloorMonths.toFixed(1)} mo</td>
+            <td>${scenario.houseFundProbabilityBand}</td>
+            <td>${scenario.strategicPosture}</td>
+            <td>${index > 0 ? `<button class="btn btn-secondary btn-inline" data-delete-scenario="${index - 1}">Delete</button>` : ''}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  E.scenarioComparison.querySelectorAll('[data-delete-scenario]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.deleteScenario);
+      state.scenarioLab.saved.splice(index, 1);
+      saveState();
+      renderAll();
+    });
+  });
+}
+
 function renderSettings() {
   Object.entries(state.profile).forEach(([key, value]) => {
     const input = E.settingsForm.elements.namedItem(key);
@@ -1227,6 +1339,7 @@ function renderAll() {
   renderOpportunityRadar(briefing, engine);
   renderTrends();
   renderSignals();
+  renderScenarioLab();
   renderSettings();
 
   E.dateStamp.textContent = new Date().toLocaleDateString();
@@ -1297,6 +1410,30 @@ function setupForms() {
       console.error(error);
       alert('Import failed. Please use a valid exported JSON file.');
     }
+  });
+
+  E.scenarioForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const formData = new FormData(E.scenarioForm);
+    Object.keys(state.scenarioLab.assumptions).forEach((key) => {
+      const value = formData.get(key);
+      state.scenarioLab.assumptions[key] = key === 'relocationCountryId' ? value : Number(value);
+    });
+    saveState();
+    renderAll();
+  });
+
+  E.saveScenario.addEventListener('click', () => {
+    const name = E.scenarioName.value.trim();
+    if (!name) {
+      alert('Name the scenario before saving.');
+      return;
+    }
+    const scenario = computeScenarioOutcome(state, state.scenarioLab.assumptions, name);
+    state.scenarioLab.saved = [scenario, ...state.scenarioLab.saved.filter((item) => item.name !== name)].slice(0, 8);
+    E.scenarioName.value = '';
+    saveState();
+    renderAll();
   });
 }
 
@@ -1705,13 +1842,11 @@ function cacheElements() {
     comparisonCountry1: document.getElementById('comparison-country-1'),
     comparisonCountry2: document.getElementById('comparison-country-2'),
     persistenceStamp: document.getElementById('persistence-stamp'),
-    scoreTrendsChart: document.getElementById('score-trends-chart'),
-    runwayHouseChart: document.getElementById('runway-house-chart'),
-    burnoutLoadChart: document.getElementById('burnout-load-chart'),
-    jobsApplicationsChart: document.getElementById('jobs-applications-chart'),
-    trendRangeButtons: document.querySelectorAll('.trend-range-btn'),
-    trendMAToggle: document.getElementById('trend-ma-toggle'),
-    trendCharts: {},
+    scenarioForm: document.getElementById('scenario-form'),
+    scenarioName: document.getElementById('scenario-name'),
+    saveScenario: document.getElementById('save-scenario'),
+    scenarioOutcomeCards: document.getElementById('scenario-outcome-cards'),
+    scenarioComparison: document.getElementById('scenario-comparison'),
   });
 }
 

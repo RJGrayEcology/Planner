@@ -35,7 +35,7 @@
         <button class="nav-btn" data-section="career-watch">Career Watch</button>
         <button class="nav-btn" data-section="family-readiness">Family Readiness</button>
         <button class="nav-btn" data-section="opportunity-radar">Opportunity Radar</button>
-        <button class="nav-btn" data-section="trends">Trends</button>
+        <button class="nav-btn" data-section="scenario-lab">Scenario Lab</button>
         <button class="nav-btn" data-section="signals">Signals</button>
         <button class="nav-btn" data-section="settings">Settings</button>
       </nav>
@@ -324,44 +324,61 @@
         </div>
       </section>
 
-      <section id="trends" class="section">
-        <div class="card trend-controls-card">
-          <div class="card-header trend-toolbar">
-            <div>
-              <p class="eyebrow">Historical analytics</p>
-              <h3>Trend window</h3>
-            </div>
-            <div class="trend-actions">
-              <div class="range-toggle" role="group" aria-label="Trend range">
-                <button class="btn btn-secondary trend-range-btn active" data-range="30" type="button">30d</button>
-                <button class="btn btn-secondary trend-range-btn" data-range="90" type="button">90d</button>
-                <button class="btn btn-secondary trend-range-btn" data-range="365" type="button">1y</button>
+      <section id="scenario-lab" class="section">
+        <div class="grid two-col">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Editable assumptions</p>
+                <h3>Scenario setup</h3>
               </div>
-              <label class="trend-checkbox"><input type="checkbox" id="trend-ma-toggle" checked /> Moving average overlays</label>
+            </div>
+            <form id="scenario-form" class="form-grid">
+              <label>Salary change (%)
+                <input type="number" name="salaryDeltaPct" step="1" min="-60" max="120" />
+              </label>
+              <label>Spouse income activation (months)
+                <input type="number" name="spouseActivationMonths" step="1" min="0" max="120" />
+              </label>
+              <label>Child cost monthly delta (€)
+                <input type="number" name="childCostDelta" step="25" min="-500" max="4000" />
+              </label>
+              <label>Housing price shock (%)
+                <input type="number" name="housingPriceShockPct" step="1" min="-40" max="80" />
+              </label>
+              <label>Housing rate shock (%)
+                <input type="number" name="housingRateShockPct" step="0.5" min="-8" max="12" />
+              </label>
+              <label>Relocation country
+                <select name="relocationCountryId">
+                  <option value="belgium">Belgium</option>
+                  <option value="france">France</option>
+                  <option value="united-states">United States</option>
+                  <option value="netherlands">Netherlands</option>
+                  <option value="canada">Canada</option>
+                  <option value="germany">Germany</option>
+                  <option value="portugal">Portugal</option>
+                  <option value="switzerland">Switzerland</option>
+                </select>
+              </label>
+              <div class="form-actions full-width">
+                <button class="btn btn-primary" type="submit">Run scenario</button>
+              </div>
+            </form>
+            <div class="form-actions mt-lg">
+              <input id="scenario-name" type="text" placeholder="Scenario name (e.g. US rate shock)" />
+              <button id="save-scenario" class="btn btn-secondary" type="button">Save named scenario</button>
             </div>
           </div>
-        </div>
-
-        <div class="grid two-col mt-lg">
           <div class="card">
-            <div class="card-header"><h3>Score trends</h3></div>
-            <div class="chart-wrap"><canvas id="score-trends-chart"></canvas></div>
-          </div>
-          <div class="card">
-            <div class="card-header"><h3>Cash runway + house-fund trajectory</h3></div>
-            <div class="chart-wrap"><canvas id="runway-house-chart"></canvas></div>
+            <div class="card-header"><h3>Scenario outcomes</h3></div>
+            <div id="scenario-outcome-cards" class="grid three-col"></div>
           </div>
         </div>
 
-        <div class="grid two-col mt-lg">
-          <div class="card">
-            <div class="card-header"><h3>Burnout vs weekly execution load</h3></div>
-            <div class="chart-wrap"><canvas id="burnout-load-chart"></canvas></div>
-          </div>
-          <div class="card">
-            <div class="card-header"><h3>High-fit jobs and tracked applications</h3></div>
-            <div class="chart-wrap"><canvas id="jobs-applications-chart"></canvas></div>
-          </div>
+        <div class="card mt-lg">
+          <div class="card-header"><h3>Side-by-side comparison</h3></div>
+          <div id="scenario-comparison" class="table-wrap"></div>
         </div>
       </section>
 
