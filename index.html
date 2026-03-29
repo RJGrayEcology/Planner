@@ -137,6 +137,11 @@
             <div id="checkpoint-list" class="stack compact"></div>
           </div>
         </div>
+
+        <div class="card mt-lg">
+          <div class="card-header"><h3>Weekly operations loop</h3></div>
+          <div id="weekly-ops-loop" class="stack compact"></div>
+        </div>
       </section>
 
       <section id="life-horizons" class="section">
@@ -508,6 +513,30 @@
       <div class="rec-section">
         <p class="note-kicker">Next review</p>
         <p class="rec-review"></p>
+      </div>
+      <div class="rec-log-grid">
+        <label>Status
+          <select class="rec-status">
+            <option value="">Select</option>
+            <option value="done">done</option>
+            <option value="skipped">skipped</option>
+            <option value="deferred">deferred</option>
+          </select>
+        </label>
+        <label>Reason code
+          <select class="rec-reason">
+            <option value="">Select</option>
+            <option value="time_constraint">time_constraint</option>
+            <option value="low_signal_quality">low_signal_quality</option>
+            <option value="energy_protection">energy_protection</option>
+            <option value="waiting_dependency">waiting_dependency</option>
+            <option value="reprioritized">reprioritized</option>
+          </select>
+        </label>
+        <label class="full-width">Observed outcome notes
+          <textarea class="rec-outcome" rows="2" placeholder="What happened after this action?"></textarea>
+        </label>
+        <button class="btn btn-secondary rec-save" type="button">Save outcome</button>
       </div>
     </article>
   </template>

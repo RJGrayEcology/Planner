@@ -179,17 +179,18 @@ const DEFAULT_STATE = {
     { name: 'FMP market gainers API', type: 'API', status: 'live', note: 'Daily market momentum scan for investment radar.' },
     { name: 'Alternative.me sentiment API', type: 'API', status: 'live', note: 'Live fear & greed signal for risk pacing.' },
   ],
-  portfolioPolicy: {
-    emergencyFloorMonths: 12,
-    runwayTargetMonths: 18,
-    houseFundProtectionThreshold: 0.65,
-    maxRiskAllocationUnderRunwayTarget: 0.25,
-    monthlyInvestableBands: [
-      { max: 399, label: 'stability-first', riskAllocation: 0.1 },
-      { max: 899, label: 'balanced', riskAllocation: 0.18 },
-      { max: 1799, label: 'progressive', riskAllocation: 0.28 },
-      { max: null, label: 'accelerated', riskAllocation: 0.38 },
-    ],
+  weeklyLoop: {
+    weekAnchorDate: null,
+    checkpoints: {
+      mondaySignalReview: { completedAt: null, note: '' },
+      midweekExecutionCheckpoint: { completedAt: null, note: '' },
+      fridayReflection: { completedAt: null, note: '' },
+      sundayPlanUpdate: { completedAt: null, note: '' },
+    },
+  },
+  actionLearning: {
+    logs: [],
+    stats: {},
   },
   meta: { lastEngine: null, lastSavedAt: null },
   scenarioLab: {
@@ -237,13 +238,23 @@ function hydrateState(parsed = {}) {
       jobDecisions: { ...clone(DEFAULT_STATE.signals.jobDecisions), ...(parsed.signals?.jobDecisions || {}) },
     },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
-    portfolioPolicy: { ...clone(DEFAULT_STATE.portfolioPolicy), ...(parsed.portfolioPolicy || {}) },
+    weeklyLoop: { ...clone(DEFAULT_STATE.weeklyLoop), ...(parsed.weeklyLoop || {}) },
+    actionLearning: { ...clone(DEFAULT_STATE.actionLearning), ...(parsed.actionLearning || {}) },
     meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
     scenarioLab: {
       assumptions: { ...clone(DEFAULT_STATE.scenarioLab.assumptions), ...(parsed.scenarioLab?.assumptions || {}) },
       saved: Array.isArray(parsed.scenarioLab?.saved) ? parsed.scenarioLab.saved : clone(DEFAULT_STATE.scenarioLab.saved),
     },
   };
+
+  merged.weeklyLoop.checkpoints = {
+    ...clone(DEFAULT_STATE.weeklyLoop.checkpoints),
+    ...(parsed.weeklyLoop?.checkpoints || {}),
+  };
+  merged.actionLearning.logs = Array.isArray(parsed.actionLearning?.logs) ? parsed.actionLearning.logs : [];
+  merged.actionLearning.stats = parsed.actionLearning?.stats && typeof parsed.actionLearning.stats === 'object'
+    ? parsed.actionLearning.stats
+    : {};
 
   merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
   merged.history.daily = Array.isArray(parsed?.history?.daily) ? parsed.history.daily : [];
@@ -586,75 +597,40 @@ function getRelevantJobs(stateRef) {
     .slice(0, 10);
 }
 
-function normalizeText(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function getWeekAnchorDate(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 Sun - 6 Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
 }
 
-function detectDomain(haystack) {
-  if (/(intelligence|threat|geopolit|crime|enforcement|interpol|europol)/.test(haystack)) return 'intelligence';
-  if (/(osint|open source|investigat|monitoring|due diligence)/.test(haystack)) return 'osint';
-  if (/(risk|security|compliance|fraud|aml|sanction)/.test(haystack)) return 'risk';
-  if (/(conservation|wildlife|biodiversity|park|environment|ecology)/.test(haystack)) return 'conservation';
-  return 'other';
+function ensureCurrentWeekLoop(stateRef) {
+  const currentAnchor = getWeekAnchorDate();
+  if (stateRef.weeklyLoop.weekAnchorDate === currentAnchor) return;
+  stateRef.weeklyLoop = {
+    weekAnchorDate: currentAnchor,
+    checkpoints: clone(DEFAULT_STATE.weeklyLoop.checkpoints),
+  };
 }
 
-function detectSeniority(haystack) {
-  if (/(director|head|lead|principal|senior|expert)/.test(haystack)) return 'senior';
-  if (/(intern|junior|entry|assistant|associate)/.test(haystack)) return 'junior';
-  return 'mid';
-}
+function applyLearningToConfidence(stateRef, actionKey, baseScore) {
+  const stats = stateRef.actionLearning.stats[actionKey];
+  if (!stats || stats.total < 3) {
+    return { score: clamp(round(baseScore), 20, 95), label: baseScore >= 72 ? 'High' : baseScore >= 52 ? 'Medium' : 'Low' };
+  }
 
-function scoreJobFit(job, laneProfiles) {
-  const haystack = normalizeText(`${job.title} ${job.detail} ${job.location || ''}`);
-  const domain = detectDomain(haystack);
-  const seniority = detectSeniority(haystack);
-  const isRemote = /(remote|anywhere|worldwide)/.test(haystack) || job.isRemote;
-  const hasSalary = Boolean(job.salary);
-  const contractLabel = normalizeText(job.contractType || job.detail);
-
-  const laneScores = laneProfiles.map((lane) => {
-    const domainMatch = lane.targetDomains.includes(domain) ? 100 : 30;
-    const seniorityMatch = lane.seniority === seniority ? 100 : lane.seniority === 'senior' && seniority === 'mid' ? 70 : 35;
-    const locationMatch = isRemote
-      ? (lane.remotePreference === 'remote' ? 100 : lane.remotePreference === 'hybrid' ? 80 : 60)
-      : (lane.preferredLocations.some((loc) => haystack.includes(loc)) ? 85 : 45);
-    const contractTypeMatch = lane.contractPreferences.some((type) => contractLabel.includes(type)) ? 100 : 55;
-    const salaryVisibility = hasSalary ? 100 : 0;
-
-    const weighted = round(
-      domainMatch * 0.4
-      + seniorityMatch * 0.22
-      + locationMatch * 0.18
-      + contractTypeMatch * 0.12
-      + salaryVisibility * 0.08,
-    );
-
-    return {
-      lane: lane.title,
-      weighted,
-      breakdown: { domainMatch, seniorityMatch, locationMatch, contractTypeMatch, salaryVisibility },
-      tags: { domain, seniority, isRemote },
-    };
-  });
-
-  const best = laneScores.sort((a, b) => b.weighted - a.weighted)[0];
-  return { total: best.weighted, lane: best.lane, breakdown: best.breakdown, tags: best.tags };
-}
-
-function getJobExclusionReason(job, laneProfiles) {
-  const haystack = normalizeText(`${job.title} ${job.detail} ${job.company || ''}`);
-  const domain = detectDomain(haystack);
-  const seniority = detectSeniority(haystack);
-
-  if (domain === 'other') return 'irrelevant domains';
-  const supportsDomain = laneProfiles.some((lane) => lane.targetDomains.includes(domain));
-  if (!supportsDomain) return 'irrelevant domains';
-
-  const seniorityAligned = laneProfiles.some((lane) => lane.seniority === seniority || (lane.seniority === 'senior' && seniority === 'mid'));
-  if (!seniorityAligned) return 'mismatch seniority';
-
-  if (/(urgent hiring|walk in|multiple openings|telegram|whatsapp)/.test(haystack)) return 'low-quality repost patterns';
-  return null;
+  const completionRate = (stats.done || 0) / Math.max(stats.total, 1);
+  const deferRate = (stats.deferred || 0) / Math.max(stats.total, 1);
+  const skipRate = (stats.skipped || 0) / Math.max(stats.total, 1);
+  const outcomeBoost = clamp((stats.positiveOutcomeCount || 0) - (stats.negativeOutcomeCount || 0), -5, 5);
+  const adjustment = completionRate * 18 - deferRate * 10 - skipRate * 14 + outcomeBoost;
+  const learnedScore = clamp(round(baseScore + adjustment), 20, 95);
+  return {
+    score: learnedScore,
+    label: learnedScore >= 72 ? 'High' : learnedScore >= 52 ? 'Medium' : 'Low',
+  };
 }
 
 function generateBriefing(stateRef, engine) {
@@ -678,7 +654,38 @@ function generateBriefing(stateRef, engine) {
   const marketActions = classifyMarketFeedToActionClasses(stateRef.signals.investments, policySnapshot);
 
   return {
-    today: rankedRecommendations,
+    today: [
+      {
+        actionKey: 'ship_high_value_output',
+        title: 'Ship one high-value output in your strongest lane',
+        meta: 'Income leverage | Expertise-first',
+        description: `Prioritize ${topOpps[0].title.toLowerCase()} and complete one concrete output (proposal, brief, or targeted application).`,
+        payoff: 'High leverage',
+        risk: 'Low risk',
+        time: '45-60 min',
+        baseConfidenceScore: 76,
+      },
+      {
+        actionKey: 'apply_or_outreach_live_role',
+        title: liveJob ? `Apply or outreach to this live role: ${liveJob.title}` : 'No live role captured yet: run manual job scan now',
+        meta: 'Career watch | Live feed',
+        description: liveJob ? `${liveJob.detail}. Use this as your first concrete career action today.` : 'Trigger “Load live signals” and shortlist one role with clear fit before ending the day.',
+        payoff: 'Career acceleration',
+        risk: 'Low risk',
+        time: '20-30 min',
+        baseConfidenceScore: liveJob ? 78 : 58,
+      },
+      {
+        actionKey: 'apply_weekend_energy_protocol',
+        title: weekendMode ? 'Weekend protection ON: run low-cognitive tasks only' : 'Weekend protection OFF: one medium push is allowed',
+        meta: 'Energy protocol',
+        description: weekendMode ? 'Burnout is elevated, so this engine is protecting recovery. Keep weekend execution to admin, maintenance, and setup tasks.' : 'Energy load is acceptable. Add one medium-effort strategic task, then hard-stop.',
+        payoff: 'Burnout control',
+        risk: 'Low risk',
+        time: '20-40 min',
+        baseConfidenceScore: 74,
+      },
+    ],
     whyNow: [
       { title: 'Family runway pressure is real', detail: `Runway is ${round(engine.runway)} months. Child-related uncertainty makes liquidity timing critical.` },
       { title: 'Opportunity quality is concentrated', detail: `Top lane fit is ${topOpps[0].fit}/100; broad side-hustle exploration should stay deprioritized.` },
@@ -756,66 +763,11 @@ function buildPortfolioPolicySnapshot(stateRef, engine) {
   };
 }
 
-function classifyMarketFeedToActionClasses(investments = [], policySnapshot) {
-  return investments.slice(0, 6).map((item) => {
-    const blob = `${item.title} ${item.detail}`.toLowerCase();
-    if (blob.includes('fear & greed')) {
-      const fearMatch = item.title.match(/Fear & Greed:\s*(\d+)/i);
-      const score = fearMatch ? Number(fearMatch[1]) : null;
-      if (score !== null && score < 35) {
-        return {
-          actionClass: policySnapshot.whyNotBuyConditions.length ? 'defer risk' : 'deploy incremental capital',
-          title: item.title,
-          detail: score < 20 ? 'Sentiment is very fearful; only deploy if constraints are already satisfied.' : 'Fear is elevated; scale in small tranches only if personal guardrails are green.',
-        };
-      }
-      if (score !== null && score > 70) {
-        return { actionClass: 'rebalance', title: item.title, detail: 'Greed is elevated; trim concentration and rebalance to target weights.' };
-      }
-      return { actionClass: 'watch', title: item.title, detail: 'Neutral sentiment; observe but avoid forcing trades from noise.' };
-    }
-
-    if (policySnapshot.whyNotBuyConditions.length) {
-      return { actionClass: 'defer risk', title: item.title, detail: 'Signal noted, but personal constraints currently block new risk deployment.' };
-    }
-
-    return { actionClass: 'deploy incremental capital', title: item.title, detail: `Eligible for a staged buy plan up to ${round(policySnapshot.effectiveRiskAllocationCap * 100)}% of monthly investable amount.` };
+function annotateLearnedConfidence(stateRef, recommendations) {
+  return recommendations.map((rec) => {
+    const learned = applyLearningToConfidence(stateRef, rec.actionKey, rec.baseConfidenceScore || 60);
+    return { ...rec, confidence: `${learned.label} (${learned.score})`, confidenceScore: learned.score };
   });
-}
-
-function buildConstraintFirstRecommendations(policySnapshot, marketActions, liveInvestment) {
-  const recommendations = [];
-  if (policySnapshot.isRunwayBelowEmergencyFloor) {
-    recommendations.push({
-      title: 'Restore emergency floor before new risk',
-      detail: `Cash floor is under policy. Route surplus to liquidity until ${euros(policySnapshot.emergencyFloorAmount)} is secured.`,
-    });
-  } else if (policySnapshot.isHouseFundUnderProtection) {
-    recommendations.push({
-      title: 'Protect house fund threshold first',
-      detail: `House objective is below protected threshold (${euros(policySnapshot.houseFundTargetProtected)}). Keep risk adds secondary.`,
-    });
-  } else {
-    recommendations.push({
-      title: 'Constraints satisfied: controlled risk deployment allowed',
-      detail: `Current band is "${policySnapshot.investableBand.label}" with max risk pace ${round(policySnapshot.effectiveRiskAllocationCap * 100)}% of monthly investable cash.`,
-    });
-  }
-
-  const prioritizedAction = marketActions.find((item) => item.actionClass !== 'watch') || marketActions[0];
-  recommendations.push({
-    title: prioritizedAction ? `Market action class: ${prioritizedAction.actionClass}` : 'No classified market action yet',
-    detail: prioritizedAction ? `${prioritizedAction.title} — ${prioritizedAction.detail}` : (liveInvestment ? liveInvestment.detail : 'Load live signals to classify market inputs into actions.'),
-  });
-
-  recommendations.push({
-    title: 'Why not buy guardrails',
-    detail: policySnapshot.whyNotBuyConditions.length
-      ? policySnapshot.whyNotBuyConditions.join(' ')
-      : 'No hard blockers detected. Continue with incremental sizing, not lump-sum reactions.',
-  });
-
-  return recommendations;
 }
 
 function getDirective(engine) {
@@ -848,20 +800,48 @@ function recommendationNode(rec) {
   node.querySelector('.rec-impact').textContent = rec.expectedImpact;
   node.querySelector('.rec-urgency').textContent = rec.urgency;
   node.querySelector('.confidence-pill').textContent = rec.confidence;
-  node.querySelector('.rec-what-changed').textContent = rec.whatChanged;
-  node.querySelector('.rec-why-now').textContent = rec.whyNow;
-  const evidenceList = node.querySelector('.rec-evidence');
-  evidenceList.innerHTML = '';
-  (rec.because || []).forEach((evidence) => {
-    const li = document.createElement('li');
-    li.textContent = evidence;
-    evidenceList.appendChild(li);
-  });
-  const reviewDate = rec.expiresAt || rec.reviewAt;
-  node.querySelector('.rec-review').textContent = reviewDate
-    ? new Date(reviewDate).toLocaleString()
-    : 'Review in next planning cycle';
+  node.querySelector('.rec-payoff').textContent = rec.payoff;
+  node.querySelector('.rec-risk').textContent = rec.risk;
+  node.querySelector('.rec-time').textContent = rec.time;
+  node.querySelector('.rec-status').value = '';
+  node.querySelector('.rec-reason').value = '';
+  node.querySelector('.rec-outcome').value = '';
+  const saveBtn = node.querySelector('.rec-save');
+  saveBtn.dataset.actionKey = rec.actionKey || '';
+  saveBtn.addEventListener('click', () => handleActionLog(saveBtn));
   return node;
+}
+
+function handleActionLog(buttonEl) {
+  const card = buttonEl.closest('.recommendation-card');
+  const status = card.querySelector('.rec-status').value;
+  const reasonCode = card.querySelector('.rec-reason').value;
+  const outcome = card.querySelector('.rec-outcome').value.trim();
+  const actionKey = buttonEl.dataset.actionKey;
+  if (!actionKey || !status || !reasonCode) return;
+
+  const log = {
+    actionKey,
+    status,
+    reasonCode,
+    outcome,
+    loggedAt: new Date().toISOString(),
+  };
+  state.actionLearning.logs.unshift(log);
+  state.actionLearning.logs = state.actionLearning.logs.slice(0, 300);
+
+  const stats = state.actionLearning.stats[actionKey] || {
+    total: 0, done: 0, skipped: 0, deferred: 0, positiveOutcomeCount: 0, negativeOutcomeCount: 0,
+  };
+  stats.total += 1;
+  stats[status] = (stats[status] || 0) + 1;
+  const lowerOutcome = outcome.toLowerCase();
+  if (/(improved|better|win|progress|closed|completed|success)/.test(lowerOutcome)) stats.positiveOutcomeCount += 1;
+  if (/(worse|blocked|missed|delay|failed|burnout|regress)/.test(lowerOutcome)) stats.negativeOutcomeCount += 1;
+  state.actionLearning.stats[actionKey] = stats;
+
+  saveState();
+  renderAll();
 }
 
 function noteCard(item, kicker = '') {
@@ -896,12 +876,52 @@ function renderOverview(engine, briefing, changeItems) {
   const degrees = Math.max(4, Math.round(engine.compositeScore * 3.6));
   E.compositeScoreRing.style.background = `conic-gradient(var(--accent) 0deg, var(--accent-2) ${degrees}deg, rgba(255,255,255,0.08) ${degrees}deg)`;
 
-  renderStack(E.todayActions, briefing.today, recommendationNode);
+  const todayWithConfidence = annotateLearnedConfidence(state, briefing.today);
+  renderStack(E.todayActions, todayWithConfidence, recommendationNode);
   renderStack(E.whyNow, briefing.whyNow, (item) => noteCard(item, 'Why now'));
   renderStack(E.whatChanged, changeItems, (item) => noteCard(item, 'Change'));
   renderStack(E.threatList, state.threats, (item) => noteCard({ title: item.title, detail: item.note }, item.severity));
   renderStack(E.opportunityLanes, briefing.topOpps.slice(0, 3), (item) => noteCard({ title: item.title, detail: item.why }, item.type));
   renderStack(E.checkpointList, briefing.checkpoints, (item) => noteCard(item, 'Checkpoint'));
+  renderWeeklyLoop();
+}
+
+function checkpointLabel(checkpoint) {
+  if (!checkpoint.completedAt) return 'Pending';
+  return `Done ${new Date(checkpoint.completedAt).toLocaleDateString()}`;
+}
+
+function renderWeeklyLoop() {
+  const checkpoints = state.weeklyLoop.checkpoints;
+  const rows = [
+    { key: 'mondaySignalReview', label: 'Monday signal review' },
+    { key: 'midweekExecutionCheckpoint', label: 'Midweek execution checkpoint' },
+    { key: 'fridayReflection', label: 'Friday reflection' },
+    { key: 'sundayPlanUpdate', label: 'Sunday plan update' },
+  ];
+  E.weeklyOpsLoop.innerHTML = rows.map((row) => `
+    <div class="weekly-row">
+      <div>
+        <p class="weekly-title">${row.label}</p>
+        <p class="muted small">${checkpointLabel(checkpoints[row.key])}</p>
+      </div>
+      <div class="weekly-actions">
+        <input type="text" class="weekly-note" data-key="${row.key}" placeholder="Notes (optional)" value="${checkpoints[row.key].note || ''}" />
+        <button class="btn btn-secondary weekly-complete" data-key="${row.key}">Mark done</button>
+      </div>
+    </div>
+  `).join('');
+
+  E.weeklyOpsLoop.querySelectorAll('.weekly-complete').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const noteInput = E.weeklyOpsLoop.querySelector(`.weekly-note[data-key="${key}"]`);
+      state.weeklyLoop.checkpoints[key].completedAt = new Date().toISOString();
+      state.weeklyLoop.checkpoints[key].note = noteInput?.value?.trim() || '';
+      saveState();
+      renderAll();
+    });
+  });
 }
 
 function renderHorizons(briefing) {
@@ -1325,6 +1345,7 @@ function renderSettings() {
 }
 
 function renderAll() {
+  ensureCurrentWeekLoop(state);
   const engine = computeEngine(state);
   upsertDailySnapshot(engine);
   const briefing = generateBriefing(state, engine);
@@ -1794,6 +1815,7 @@ function cacheElements() {
     threatList: document.getElementById('threat-list'),
     opportunityLanes: document.getElementById('opportunity-lanes'),
     checkpointList: document.getElementById('checkpoint-list'),
+    weeklyOpsLoop: document.getElementById('weekly-ops-loop'),
 
     horizonTimeline: document.getElementById('horizon-timeline'),
     strategyNarrative: document.getElementById('strategy-narrative'),
