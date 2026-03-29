@@ -8,6 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -29,6 +35,7 @@
         <button class="nav-btn" data-section="career-watch">Career Watch</button>
         <button class="nav-btn" data-section="family-readiness">Family Readiness</button>
         <button class="nav-btn" data-section="opportunity-radar">Opportunity Radar</button>
+        <button class="nav-btn" data-section="trends">Trends</button>
         <button class="nav-btn" data-section="signals">Signals</button>
         <button class="nav-btn" data-section="settings">Settings</button>
       </nav>
@@ -211,6 +218,28 @@
             <div id="location-recommendation" class="stack"></div>
           </div>
         </div>
+        <div class="card mt-lg">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">location-map panel</p>
+              <h3>Country and city assumptions map</h3>
+            </div>
+          </div>
+          <div id="location-map"></div>
+          <div class="grid two-col mt-lg">
+            <div>
+              <h4 class="map-subtitle">Country map assumptions</h4>
+              <div id="country-map-table" class="table-stack"></div>
+            </div>
+            <div>
+              <div class="city-row-header">
+                <h4 class="map-subtitle">Optional city rows</h4>
+                <button type="button" class="btn btn-secondary" id="add-city-row">Add city row</button>
+              </div>
+              <div id="city-assumption-rows" class="table-stack"></div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="career-watch" class="section">
@@ -285,6 +314,47 @@
         </div>
       </section>
 
+      <section id="trends" class="section">
+        <div class="card trend-controls-card">
+          <div class="card-header trend-toolbar">
+            <div>
+              <p class="eyebrow">Historical analytics</p>
+              <h3>Trend window</h3>
+            </div>
+            <div class="trend-actions">
+              <div class="range-toggle" role="group" aria-label="Trend range">
+                <button class="btn btn-secondary trend-range-btn active" data-range="30" type="button">30d</button>
+                <button class="btn btn-secondary trend-range-btn" data-range="90" type="button">90d</button>
+                <button class="btn btn-secondary trend-range-btn" data-range="365" type="button">1y</button>
+              </div>
+              <label class="trend-checkbox"><input type="checkbox" id="trend-ma-toggle" checked /> Moving average overlays</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid two-col mt-lg">
+          <div class="card">
+            <div class="card-header"><h3>Score trends</h3></div>
+            <div class="chart-wrap"><canvas id="score-trends-chart"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Cash runway + house-fund trajectory</h3></div>
+            <div class="chart-wrap"><canvas id="runway-house-chart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="grid two-col mt-lg">
+          <div class="card">
+            <div class="card-header"><h3>Burnout vs weekly execution load</h3></div>
+            <div class="chart-wrap"><canvas id="burnout-load-chart"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>High-fit jobs and tracked applications</h3></div>
+            <div class="chart-wrap"><canvas id="jobs-applications-chart"></canvas></div>
+          </div>
+        </div>
+      </section>
+
       <section id="signals" class="section">
         <div class="grid three-col">
           <div class="card">
@@ -319,6 +389,16 @@
         <div class="card mt-lg">
           <div class="card-header">
             <div>
+              <p class="eyebrow">Reliability</p>
+              <h3>Feed Health</h3>
+            </div>
+          </div>
+          <div id="feed-health" class="connector-grid"></div>
+        </div>
+
+        <div class="card mt-lg">
+          <div class="card-header">
+            <div>
               <p class="eyebrow">Connector map</p>
               <h3>Live connector readiness</h3>
             </div>
@@ -344,6 +424,7 @@
               <label>Expected annual return (%)<input type="number" step="0.5" name="expectedReturnPct" /></label>
               <label>Spouse remote income target (€ / month)<input type="number" step="50" name="spouseIncomeTarget" /></label>
               <label>Side income target (€ / month)<input type="number" step="50" name="sideIncomeTarget" /></label>
+              <label>Applications tracked this week<input type="number" step="1" min="0" name="applicationsTracked" /></label>
 
               <label>Optional country 1
                 <select id="comparison-country-1"></select>
@@ -377,19 +458,38 @@
       <div class="rec-top">
         <div>
           <p class="rec-title"></p>
-          <p class="rec-meta"></p>
+          <p class="rec-action"></p>
         </div>
         <span class="confidence-pill"></span>
       </div>
-      <p class="rec-description"></p>
+      <p class="rec-impact"></p>
       <div class="rec-footer">
-        <span class="rec-payoff"></span>
-        <span class="rec-risk"></span>
-        <span class="rec-time"></span>
+        <span>Urgency: <strong class="rec-urgency"></strong></span>
+      </div>
+      <div class="rec-section">
+        <p class="note-kicker">What changed</p>
+        <p class="rec-what-changed"></p>
+      </div>
+      <div class="rec-section">
+        <p class="note-kicker">Why now</p>
+        <p class="rec-why-now"></p>
+      </div>
+      <div class="rec-section">
+        <p class="note-kicker">Evidence</p>
+        <ul class="rec-evidence"></ul>
+      </div>
+      <div class="rec-section">
+        <p class="note-kicker">Next review</p>
+        <p class="rec-review"></p>
       </div>
     </article>
   </template>
 
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
   <script src="app.js"></script>
 </body>
 </html>
