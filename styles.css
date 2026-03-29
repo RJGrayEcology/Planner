@@ -634,52 +634,26 @@ select {
   font-style: italic;
 }
 
-#location-map {
-  height: 430px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  overflow: hidden;
-}
-
-.map-subtitle {
-  margin: 0 0 10px;
-}
-
-.table-stack {
-  display: grid;
-  gap: 10px;
-}
-
-.assumption-row {
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 14px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.assumption-row p {
-  margin: 0 0 8px;
-}
-
-.city-row-header {
+.job-status-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.city-grid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.city-row-actions {
+  gap: 8px;
+  flex-wrap: wrap;
   margin-top: 10px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+}
+
+.status-tag {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+}
+
+.status-tag.active {
+  border-color: rgba(94, 234, 212, 0.55);
+  background: rgba(94, 234, 212, 0.16);
+  color: var(--accent);
 }
 
 @media (max-width: 1280px) {

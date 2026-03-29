@@ -130,6 +130,26 @@ const DEFAULT_STATE = {
     { title: 'Remote strategic analyst roles linked to OSINT, risk, and monitoring', fit: 82, payoff: 'Material income lift without relocation', action: 'Monitor remote + Brussels + France roles with strict keyword filters.' },
     { title: 'Thought leadership and research publishing lane', fit: 76, payoff: 'Authority and lead flow compounding', action: 'Publish one short high-signal expert output monthly.' },
   ],
+  laneProfiles: [
+    {
+      id: 'intl-intelligence',
+      title: 'International intelligence analyst',
+      targetDomains: ['intelligence', 'osint', 'risk'],
+      seniority: 'mid',
+      preferredLocations: ['belgium', 'france', 'eu', 'europe'],
+      remotePreference: 'hybrid',
+      contractPreferences: ['full-time', 'contract'],
+    },
+    {
+      id: 'conservation-consultancy',
+      title: 'Conservation / illicit-trade consultancy',
+      targetDomains: ['conservation', 'osint', 'risk'],
+      seniority: 'senior',
+      preferredLocations: ['global', 'remote', 'europe'],
+      remotePreference: 'remote',
+      contractPreferences: ['consultancy', 'contract'],
+    },
+  ],
   spouseIncomePaths: [
     { title: 'Scientific and educational writing', fit: 87, ramp: 'Fast-medium', why: 'Fits flexible scheduling and links to primatology, conservation, parenting, and education niches.' },
     { title: 'Remote education and tutoring content', fit: 81, ramp: 'Fast', why: 'Can run in small time blocks, then evolve into reusable products.' },
@@ -140,7 +160,15 @@ const DEFAULT_STATE = {
     { title: 'One-income family pressure', severity: 'High', note: 'A child arrival increases the value of liquidity and predictable cashflow.' },
     { title: 'Opportunity dilution', severity: 'Medium', note: 'Too many broad ideas reduce execution quality. Keep expertise-first filters.' },
   ],
-  signals: { weather: null, hazards: [], tech: [], jobs: [], investments: [], meta: {}, lastUpdated: null },
+  signals: {
+    weather: null,
+    hazards: [],
+    tech: [],
+    jobs: [],
+    jobDecisions: {},
+    investments: [],
+    lastUpdated: null,
+  },
   connectors: [
     { name: 'Open-Meteo weather', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
     { name: 'NASA EONET hazards', type: 'API', status: 'live', note: 'Client-side fetch enabled.' },
@@ -215,9 +243,14 @@ function hydrateState(parsed = {}) {
     weights: { ...clone(DEFAULT_STATE.weights), ...(parsed.weights || {}) },
     opportunities: parsed.opportunities || clone(DEFAULT_STATE.opportunities),
     careerLanes: parsed.careerLanes || clone(DEFAULT_STATE.careerLanes),
+    laneProfiles: parsed.laneProfiles || clone(DEFAULT_STATE.laneProfiles),
     spouseIncomePaths: parsed.spouseIncomePaths || clone(DEFAULT_STATE.spouseIncomePaths),
     threats: parsed.threats || clone(DEFAULT_STATE.threats),
-    signals: { ...clone(DEFAULT_STATE.signals), ...(parsed.signals || {}) },
+    signals: {
+      ...clone(DEFAULT_STATE.signals),
+      ...(parsed.signals || {}),
+      jobDecisions: { ...clone(DEFAULT_STATE.signals.jobDecisions), ...(parsed.signals?.jobDecisions || {}) },
+    },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
     locations: {
       ...clone(DEFAULT_STATE.locations),
@@ -510,133 +543,90 @@ function computeChanges(currentEngine, previousEngine) {
 }
 
 function getRelevantJobs(stateRef) {
-  const baseKeywords = [
-    'analyst', 'intelligence', 'osint', 'monitoring', 'risk', 'investigation',
-    'conservation', 'wildlife', 'illicit', 'policy', 'research', 'security',
-    'europol', 'interpol', 'ai', 'remote',
-  ];
-  const laneKeywords = stateRef.careerLanes
-    .flatMap((lane) => `${lane.title} ${lane.action}`.toLowerCase().split(/[^a-z0-9]+/g))
-    .filter((word) => word.length > 3);
-  const keywords = [...new Set([...baseKeywords, ...laneKeywords])];
-
+  const seenKeys = new Set();
   return stateRef.signals.jobs
     .map((job) => {
-      const haystack = `${job.title} ${job.detail}`.toLowerCase();
-      const score = keywords.reduce((acc, keyword) => (haystack.includes(keyword) ? acc + 1 : acc), 0);
-      return { ...job, relevance: score };
+      const exclusion = getJobExclusionReason(job, stateRef.laneProfiles);
+      const fit = scoreJobFit(job, stateRef.laneProfiles);
+      const repostKey = `${normalizeText(job.title)}|${normalizeText(job.company || '')}`;
+      const isDuplicate = seenKeys.has(repostKey);
+      seenKeys.add(repostKey);
+      return { ...job, fit, exclusion: exclusion || (isDuplicate ? 'low-quality repost patterns' : null) };
     })
-    .filter((job) => job.relevance >= 2)
-    .sort((a, b) => b.relevance - a.relevance)
+    .filter((job) => !job.exclusion)
+    .sort((a, b) => b.fit.total - a.fit.total)
     .slice(0, 10);
 }
 
-function computeDrivers(engine, signals, profile) {
-  const now = Date.now();
-  const staleHours = signals.lastUpdated
-    ? (now - new Date(signals.lastUpdated).getTime()) / (1000 * 60 * 60)
-    : null;
-  const relevantJobs = (signals.relevantJobs || [])
-    .filter((job) => typeof job.relevance === 'number')
-    .sort((a, b) => b.relevance - a.relevance);
-  const freshRelevantJobs = relevantJobs.filter((job) => {
-    if (!job.postedAt) return false;
-    return now - new Date(job.postedAt).getTime() <= 24 * 60 * 60 * 1000;
-  });
-
-  const liquidityGap = clamp((12 - engine.runway) / 12, 0, 1);
-  const careerGap = clamp((75 - engine.careerLeverageScore) / 75, 0, 1);
-  const energyGap = clamp((65 - engine.weekendProtection) / 65, 0, 1);
-  const feedGap = staleHours === null ? 1 : clamp((staleHours - 12) / 36, 0, 1);
-
-  return [
-    {
-      key: 'liquidity',
-      weight: round((liquidityGap * 0.72 + (engine.investableSurplus > 0 ? 0.18 : 0.42)) * 100),
-      title: 'Protect family runway before acceleration',
-      action: 'Preserve a 12-month cash floor and only increase investments when surplus remains positive.',
-      expectedImpact: 'Lower downside risk while keeping house-fund progress steady.',
-      urgency: engine.runway < 10 ? 'High' : 'Medium',
-      confidence: engine.runway < 10 ? 88 : 74,
-      whatChanged: `Runway now ${engine.runway.toFixed(1)} months with ${euros(engine.investableSurplus)} monthly surplus.`,
-      whyNow: engine.runway < 12 ? 'A low runway can force reactive decisions during family volatility.' : 'Runway is adequate, but preserving buffer prevents backsliding.',
-      because: [
-        `Runway is ${engine.runway.toFixed(1)} months.`,
-        `Monthly investable surplus is ${euros(engine.investableSurplus)}.`,
-        `Family readiness score is ${engine.familyScore}/100.`,
-      ],
-      reviewAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      key: 'career',
-      weight: round((careerGap * 0.56 + Math.min(relevantJobs.length / 8, 0.44)) * 100),
-      title: 'Convert live market demand into targeted applications',
-      action: 'Ship one tailored application or outreach to the highest-fit role today.',
-      expectedImpact: 'Faster compensation growth and improved career leverage score.',
-      urgency: freshRelevantJobs.length >= 2 ? 'High' : 'Medium',
-      confidence: relevantJobs.length ? 82 : 61,
-      whatChanged: `${relevantJobs.length} relevant jobs in feed, ${freshRelevantJobs.length} posted in the last 24h.`,
-      whyNow: relevantJobs.length ? 'Live openings decay quickly; acting in the first day raises response odds.' : 'No validated opportunities yet, so refreshing signals is the bottleneck.',
-      because: [
-        `${relevantJobs.length} high-fit jobs matched your lanes.`,
-        `${freshRelevantJobs.length} high-fit jobs were posted in the last 24h.`,
-        `Career leverage score is ${engine.careerLeverageScore}/100.`,
-      ],
-      expiresAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      key: 'energy',
-      weight: round((energyGap * 0.78 + clamp(profile.weekendBurnout / 100, 0, 1) * 0.22) * 100),
-      title: 'Throttle weekend workload to prevent execution decay',
-      action: 'Keep weekends to low-cognitive maintenance tasks plus one bounded strategic block.',
-      expectedImpact: 'Higher consistency and lower burnout-driven drop-offs.',
-      urgency: profile.weekendBurnout >= 70 ? 'High' : 'Medium',
-      confidence: 86,
-      whatChanged: `Weekend burnout is ${profile.weekendBurnout}/100 and protection score is ${engine.weekendProtection}/100.`,
-      whyNow: profile.weekendBurnout >= 70 ? 'Recovery debt compounds quickly and can erase weekday output quality.' : 'Energy is manageable now; guardrails keep it that way.',
-      because: [
-        `Weekend burnout is ${profile.weekendBurnout}/100.`,
-        `Weekend protection score is ${engine.weekendProtection}/100.`,
-        `Weekly hours are set to ${profile.weeklyHours}h.`,
-      ],
-      reviewAt: new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      key: 'signal-freshness',
-      weight: round(feedGap * 100),
-      title: 'Refresh live feeds before making irreversible decisions',
-      action: 'Run "Load live signals" and re-rank opportunities before next major commitment.',
-      expectedImpact: 'Prevents stale-data bias in job and investment choices.',
-      urgency: staleHours === null || staleHours >= 24 ? 'High' : 'Low',
-      confidence: staleHours === null ? 58 : 72,
-      whatChanged: staleHours === null ? 'No live signal refresh has been recorded yet.' : `Last refresh was ${round(staleHours)}h ago.`,
-      whyNow: staleHours === null || staleHours >= 24 ? 'Signal quality has likely drifted beyond a reliable decision window.' : 'Feed is still reasonably fresh but should be checked before critical moves.',
-      because: [
-        staleHours === null ? 'Signals were never refreshed.' : `Last live refresh was ${round(staleHours)} hours ago.`,
-        `${signals.jobs.length} jobs and ${signals.investments.length} investment signals are currently loaded.`,
-      ],
-      reviewAt: new Date(now + 12 * 60 * 60 * 1000).toISOString(),
-    },
-  ];
+function normalizeText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function rankRecommendations(drivers) {
-  return clone(drivers)
-    .sort((a, b) => b.weight - a.weight)
-    .slice(0, 3)
-    .map((driver) => ({
-      title: driver.title,
-      action: driver.action,
-      description: driver.action,
-      expectedImpact: driver.expectedImpact,
-      urgency: driver.urgency,
-      confidence: `${driver.confidence}%`,
-      because: driver.because,
-      whatChanged: driver.whatChanged,
-      whyNow: driver.whyNow,
-      expiresAt: driver.expiresAt || null,
-      reviewAt: driver.reviewAt || null,
-    }));
+function detectDomain(haystack) {
+  if (/(intelligence|threat|geopolit|crime|enforcement|interpol|europol)/.test(haystack)) return 'intelligence';
+  if (/(osint|open source|investigat|monitoring|due diligence)/.test(haystack)) return 'osint';
+  if (/(risk|security|compliance|fraud|aml|sanction)/.test(haystack)) return 'risk';
+  if (/(conservation|wildlife|biodiversity|park|environment|ecology)/.test(haystack)) return 'conservation';
+  return 'other';
+}
+
+function detectSeniority(haystack) {
+  if (/(director|head|lead|principal|senior|expert)/.test(haystack)) return 'senior';
+  if (/(intern|junior|entry|assistant|associate)/.test(haystack)) return 'junior';
+  return 'mid';
+}
+
+function scoreJobFit(job, laneProfiles) {
+  const haystack = normalizeText(`${job.title} ${job.detail} ${job.location || ''}`);
+  const domain = detectDomain(haystack);
+  const seniority = detectSeniority(haystack);
+  const isRemote = /(remote|anywhere|worldwide)/.test(haystack) || job.isRemote;
+  const hasSalary = Boolean(job.salary);
+  const contractLabel = normalizeText(job.contractType || job.detail);
+
+  const laneScores = laneProfiles.map((lane) => {
+    const domainMatch = lane.targetDomains.includes(domain) ? 100 : 30;
+    const seniorityMatch = lane.seniority === seniority ? 100 : lane.seniority === 'senior' && seniority === 'mid' ? 70 : 35;
+    const locationMatch = isRemote
+      ? (lane.remotePreference === 'remote' ? 100 : lane.remotePreference === 'hybrid' ? 80 : 60)
+      : (lane.preferredLocations.some((loc) => haystack.includes(loc)) ? 85 : 45);
+    const contractTypeMatch = lane.contractPreferences.some((type) => contractLabel.includes(type)) ? 100 : 55;
+    const salaryVisibility = hasSalary ? 100 : 0;
+
+    const weighted = round(
+      domainMatch * 0.4
+      + seniorityMatch * 0.22
+      + locationMatch * 0.18
+      + contractTypeMatch * 0.12
+      + salaryVisibility * 0.08,
+    );
+
+    return {
+      lane: lane.title,
+      weighted,
+      breakdown: { domainMatch, seniorityMatch, locationMatch, contractTypeMatch, salaryVisibility },
+      tags: { domain, seniority, isRemote },
+    };
+  });
+
+  const best = laneScores.sort((a, b) => b.weighted - a.weighted)[0];
+  return { total: best.weighted, lane: best.lane, breakdown: best.breakdown, tags: best.tags };
+}
+
+function getJobExclusionReason(job, laneProfiles) {
+  const haystack = normalizeText(`${job.title} ${job.detail} ${job.company || ''}`);
+  const domain = detectDomain(haystack);
+  const seniority = detectSeniority(haystack);
+
+  if (domain === 'other') return 'irrelevant domains';
+  const supportsDomain = laneProfiles.some((lane) => lane.targetDomains.includes(domain));
+  if (!supportsDomain) return 'irrelevant domains';
+
+  const seniorityAligned = laneProfiles.some((lane) => lane.seniority === seniority || (lane.seniority === 'senior' && seniority === 'mid'));
+  if (!seniorityAligned) return 'mismatch seniority';
+
+  if (/(urgent hiring|walk in|multiple openings|telegram|whatsapp)/.test(haystack)) return 'low-quality repost patterns';
+  return null;
 }
 
 function generateBriefing(stateRef, engine) {
@@ -696,7 +686,7 @@ function generateBriefing(stateRef, engine) {
     })).concat(
       relevantJobs.slice(0, 2).map((job, index) => ({
         title: `Live role ${index + 1}: ${job.title}`,
-        detail: `${job.detail} | Relevance ${job.relevance}`,
+        detail: `${job.detail} | Fit ${job.fit.total}`,
         kicker: 'Live jobs feed',
       })),
     ).concat(
@@ -1024,17 +1014,27 @@ function renderCareer() {
   renderStack(E.careerLanes, state.careerLanes, (item) => noteCard({ title: item.title, detail: `${item.action} Payoff: ${item.payoff}.` }, `Fit ${item.fit}`));
   const relevantJobs = getRelevantJobs(state);
   if (!relevantJobs.length) {
-    E.jobWatchlist.innerHTML = '<p class="empty-state">No high-fit live jobs found yet. Feeds auto-refresh daily; click “Load live signals” to rescan now.</p>';
+    E.jobWatchlist.innerHTML = '<p class="empty-state">No high-fit jobs after quality filters yet. Feeds auto-refresh daily; click “Load live signals” to rescan now.</p>';
     return;
   }
 
-  E.jobWatchlist.innerHTML = relevantJobs.slice(0, 8).map((item) => `
+  E.jobWatchlist.innerHTML = relevantJobs.slice(0, 10).map((item) => {
+    const decision = state.signals.jobDecisions[item.id];
+    return `
     <article class="note-card">
       <h4><a href="${item.url}" target="_blank" rel="noopener noreferrer">${item.title}</a></h4>
       <p>${item.detail}</p>
-      <p class="note-meta">High-fit relevance: ${item.relevance}</p>
+      <p class="note-meta">Top 10 high-fit jobs today • Score ${item.fit.total} • Lane ${item.fit.lane}</p>
+      <p class="note-meta">Breakdown: domain ${item.fit.breakdown.domainMatch}, seniority ${item.fit.breakdown.seniorityMatch}, location/remote ${item.fit.breakdown.locationMatch}, contract ${item.fit.breakdown.contractTypeMatch}, salary visibility ${item.fit.breakdown.salaryVisibility}</p>
+      <div class="job-status-row">
+        <button class="status-tag ${decision?.status === 'saved' ? 'active' : ''}" data-job-id="${item.id}" data-status="saved">Saved</button>
+        <button class="status-tag ${decision?.status === 'applied' ? 'active' : ''}" data-job-id="${item.id}" data-status="applied">Applied</button>
+        <button class="status-tag ${decision?.status === 'ignored' ? 'active' : ''}" data-job-id="${item.id}" data-status="ignored">Ignored</button>
+      </div>
+      ${decision ? `<p class="note-meta">Decision: ${decision.status}${decision.reason ? ` (${decision.reason})` : ''} • Snapshot score ${decision.scoreAtDecision}</p>` : ''}
     </article>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function renderFamily(engine, briefing) {
@@ -1233,21 +1233,26 @@ function setupForms() {
 function setupActions() {
   E.refreshBriefing.addEventListener('click', () => renderAll());
   E.loadLiveSignals.addEventListener('click', loadLiveSignals);
-  E.addCityRow.addEventListener('click', () => {
-    state.locations.cityRows.push({
-      id: `city-${Date.now()}`,
-      countryId: 'belgium',
-      city: 'New city',
-      source: 'manual',
-      lat: 50.85,
-      lng: 4.35,
-      housingPressure: 50,
-      safetyProxy: 50,
-      childcareProxy: 50,
-      commuteAirportNotes: '',
-    });
+  E.jobWatchlist.addEventListener('click', (event) => {
+    const button = event.target.closest('.status-tag');
+    if (!button) return;
+    const jobId = button.dataset.jobId;
+    const status = button.dataset.status;
+    const rankedJobs = getRelevantJobs(state);
+    const job = rankedJobs.find((item) => item.id === jobId);
+    if (!job) return;
+    const reasonPrompt = status === 'ignored'
+      ? 'Why ignored? (optional)'
+      : `Add a note for "${status}" (optional)`;
+    const reason = window.prompt(reasonPrompt, '') || '';
+    state.signals.jobDecisions[jobId] = {
+      status,
+      reason,
+      scoreAtDecision: job.fit.total,
+      decidedAt: new Date().toISOString(),
+    };
     saveState();
-    renderAll();
+    renderCareer();
   });
 }
 
@@ -1409,57 +1414,107 @@ async function refreshFeeds() {
   E.loadLiveSignals.disabled = true;
 
   try {
-    const nowIso = new Date().toISOString();
-    const categoryBuckets = {};
-    const registryById = Object.fromEntries(feedRegistry.map((feed) => [feed.id, feed]));
-    const sortedFeeds = [...feedRegistry].sort((a, b) => a.priority - b.priority);
+    const weatherPromise = fetch('https://api.open-meteo.com/v1/forecast?latitude=50.85&longitude=4.35&current=temperature_2m,weather_code,wind_speed_10m&timezone=Europe%2FBerlin')
+      .then((res) => { if (!res.ok) throw new Error('Weather request failed'); return res.json(); })
+      .then((data) => ({ city: 'Brussels', temp: round(data.current.temperature_2m), wind: round(data.current.wind_speed_10m), summary: weatherCodeToText(data.current.weather_code) }));
 
-    await Promise.all(sortedFeeds.map(async (feed) => {
-      const attemptAt = new Date().toISOString();
-      const startedAt = performance.now();
-      const previousMeta = state.signals.meta[feed.id] || {};
-      try {
-        const response = await fetchWithRetry(feed.url, { timeoutMs: feed.timeoutMs, retries: 1 });
-        const json = await response.json();
-        const parsed = await feed.parser(json);
-        const itemsCount = Array.isArray(parsed) ? parsed.length : (parsed ? 1 : 0);
-        const latencyMs = round(performance.now() - startedAt);
-        state.signals.meta[feed.id] = {
-          ...previousMeta,
-          category: feed.category,
-          refreshCadenceHours: feed.refreshCadenceHours,
-          lastAttemptAt: attemptAt,
-          lastSuccessAt: new Date().toISOString(),
-          status: 'healthy',
-          errorSummary: null,
-          itemsCount,
-          latencyMs,
-        };
-        categoryBuckets[feed.category] = categoryBuckets[feed.category] || [];
-        categoryBuckets[feed.category].push({ feedId: feed.id, priority: feed.priority, payload: parsed, itemsCount });
-      } catch (error) {
-        const latencyMs = round(performance.now() - startedAt);
-        const lastSuccessAt = previousMeta.lastSuccessAt || null;
-        state.signals.meta[feed.id] = {
-          ...previousMeta,
-          category: feed.category,
-          refreshCadenceHours: feed.refreshCadenceHours,
-          lastAttemptAt: attemptAt,
-          lastSuccessAt,
-          status: 'failed',
-          errorSummary: shortError(error),
-          itemsCount: previousMeta.itemsCount || 0,
-          latencyMs,
-        };
-      }
-    }));
+    const hazardPromise = fetch('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=5')
+      .then((res) => { if (!res.ok) throw new Error('Hazard request failed'); return res.json(); })
+      .then((data) => (data.events || []).map((event) => ({
+        title: event.title,
+        detail: `${event.categories?.map((c) => c.title).join(', ') || 'Event'} | ${event.geometry?.[0]?.date ? new Date(event.geometry[0].date).toLocaleDateString() : 'Recent'}`,
+      })));
 
-    const chooseCategoryPayload = (category, previousValue) => {
-      const successful = (categoryBuckets[category] || []).filter((entry) => entry.itemsCount > 0).sort((a, b) => a.priority - b.priority);
-      if (!successful.length) return previousValue;
-      if (category === 'weather') return successful[0].payload;
-      return successful.flatMap((entry) => (Array.isArray(entry.payload) ? entry.payload : [entry.payload]));
-    };
+    const techPromise = fetch('https://hacker-news.firebaseio.com/v0/topstories.json')
+      .then((res) => { if (!res.ok) throw new Error('HN request failed'); return res.json(); })
+      .then(async (ids) => {
+        const stories = await Promise.all(ids.slice(0, 5).map((id) => fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then((res) => res.json())));
+        return stories.filter(Boolean).map((story) => ({ title: story.title, detail: `Score ${story.score || 0} | ${story.by || 'unknown'} | ${story.url || 'news.ycombinator.com'}` }));
+      });
+
+    const reliefWebPromise = fetch('https://api.reliefweb.int/v1/jobs?appname=strategic-life-dashboard&limit=8&sort[]=date:desc')
+      .then((res) => { if (!res.ok) throw new Error('ReliefWeb request failed'); return res.json(); })
+      .then((data) => (data.data || []).map((item) => ({
+        id: `reliefweb-${item.id || item.fields?.url || Math.random().toString(36).slice(2)}`,
+        title: item.fields?.title || 'ReliefWeb opportunity',
+        detail: `ReliefWeb | ${item.fields?.country?.[0]?.name || 'Global'} | ${item.fields?.career_categories?.[0]?.name || 'Professional'}`,
+        company: item.fields?.source?.[0]?.name || 'ReliefWeb',
+        location: item.fields?.country?.[0]?.name || 'Global',
+        contractType: item.fields?.type?.[0]?.name || '',
+        salary: item.fields?.salary || '',
+        url: item.fields?.url || 'https://reliefweb.int/jobs',
+      })));
+
+    const arbeitnowPromise = fetch('https://www.arbeitnow.com/api/job-board-api')
+      .then((res) => { if (!res.ok) throw new Error('Arbeitnow request failed'); return res.json(); })
+      .then((data) => (data.data || []).slice(0, 8).map((item) => ({
+        id: `arbeitnow-${item.slug || item.url || Math.random().toString(36).slice(2)}`,
+        title: item.title || 'Arbeitnow opportunity',
+        detail: `Arbeitnow | ${item.company_name || 'Company'} | ${item.location || 'Remote'}`,
+        company: item.company_name || 'Arbeitnow employer',
+        location: item.location || 'Remote',
+        contractType: item.job_types?.[0] || '',
+        salary: item.salary || '',
+        isRemote: /remote/i.test(item.location || ''),
+        url: item.url || 'https://www.arbeitnow.com/jobs',
+      })));
+
+    const remotivePromise = fetch('https://remotive.com/api/remote-jobs?limit=12')
+      .then((res) => { if (!res.ok) throw new Error('Remotive request failed'); return res.json(); })
+      .then((data) => ((data.jobs || []).slice(0, 8)).map((item) => ({
+        id: `remotive-${item.id || item.url || Math.random().toString(36).slice(2)}`,
+        title: item.title || 'Remotive opportunity',
+        detail: `Remotive | ${item.company_name || 'Company'} | ${item.candidate_required_location || 'Remote'}`,
+        company: item.company_name || 'Remotive employer',
+        location: item.candidate_required_location || 'Remote',
+        contractType: item.job_type || '',
+        salary: item.salary || '',
+        isRemote: true,
+        url: item.url || 'https://remotive.com/remote-jobs',
+      })));
+
+    const marketGainersPromise = fetch('https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey=demo')
+      .then((res) => { if (!res.ok) throw new Error('FMP gainers request failed'); return res.json(); })
+      .then((data) => (Array.isArray(data) ? data.slice(0, 5) : []).map((item) => ({
+        title: `${item.ticker || item.symbol || 'Ticker'} (${item.changesPercentage || 'n/a'})`,
+        detail: `Top gainer | Price ${item.price || 'n/a'} | Volume ${item.volume || 'n/a'}`,
+      })));
+
+    const fearGreedPromise = fetch('https://api.alternative.me/fng/?limit=1')
+      .then((res) => { if (!res.ok) throw new Error('Fear/Greed request failed'); return res.json(); })
+      .then((data) => {
+        const latest = data?.data?.[0];
+        if (!latest) return [];
+        return [{
+          title: `Fear & Greed: ${latest.value} (${latest.value_classification})`,
+          detail: 'Use as a risk pacing signal, not a stand-alone investment decision trigger.',
+        }];
+      });
+
+    const [weatherResult, hazardResult, techResult, reliefWebResult, arbeitnowResult, remotiveResult, marketGainersResult, fearGreedResult] = await Promise.allSettled([
+      weatherPromise,
+      hazardPromise,
+      techPromise,
+      reliefWebPromise,
+      arbeitnowPromise,
+      remotivePromise,
+      marketGainersPromise,
+      fearGreedPromise,
+    ]);
+    if (weatherResult.status === 'fulfilled') state.signals.weather = weatherResult.value;
+    if (hazardResult.status === 'fulfilled') state.signals.hazards = hazardResult.value;
+    if (techResult.status === 'fulfilled') state.signals.tech = techResult.value;
+    const liveJobs = [
+      ...(reliefWebResult.status === 'fulfilled' ? reliefWebResult.value : []),
+      ...(arbeitnowResult.status === 'fulfilled' ? arbeitnowResult.value : []),
+      ...(remotiveResult.status === 'fulfilled' ? remotiveResult.value : []),
+    ];
+    state.signals.jobs = liveJobs.slice(0, 14);
+    const liveInvestments = [
+      ...(marketGainersResult.status === 'fulfilled' ? marketGainersResult.value : []),
+      ...(fearGreedResult.status === 'fulfilled' ? fearGreedResult.value : []),
+    ];
+    state.signals.investments = liveInvestments.slice(0, 8);
 
     const feedFailed = (feedId) => (state.signals.meta[feedId]?.status === 'failed');
     Object.values(registryById).forEach((feed) => {
