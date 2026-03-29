@@ -582,9 +582,8 @@ label {
 }
 
 input[type="number"],
-input[type="file"],
 input[type="text"],
-textarea {
+input[type="file"] {
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(255,255,255,0.03);
@@ -693,64 +692,61 @@ select {
   font-style: italic;
 }
 
-.panel-meta {
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 14px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.02);
-  margin-bottom: 10px;
+#location-map {
+  height: 430px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  overflow: hidden;
 }
 
-.panel-meta-head {
+#location-map .map-fallback {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  margin: 0;
+  padding: 14px;
+}
+
+.map-subtitle {
+  margin: 0 0 10px;
+}
+
+.table-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.assumption-row {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.assumption-row p {
+  margin: 0 0 8px;
+}
+
+.city-row-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
-.panel-source-list {
+.city-grid {
   display: grid;
-  gap: 6px;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.source-row {
+.city-row-actions {
+  margin-top: 10px;
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 0.8rem;
-  color: #dce7f7;
+  align-items: center;
 }
-
-.panel-confidence-badge {
-  display: inline-flex;
-  border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-
-.confidence-high {
-  background: rgba(74, 222, 128, 0.14);
-  color: var(--success);
-}
-
-.confidence-medium {
-  background: rgba(251, 191, 36, 0.14);
-  color: var(--warn);
-}
-
-.confidence-low {
-  background: rgba(251, 113, 133, 0.14);
-  color: var(--danger);
-}
-
-.panel-warning {
-  margin: 0 0 12px;
-  color: var(--warn);
-  font-size: 0.82rem;
-}
-
-.hidden { display: none; }
 
 @media (max-width: 1280px) {
   .hero-grid,
@@ -792,8 +788,8 @@ select {
   .rec-log-grid,
   .allocation-row,
   .country-score-row,
-  .weekly-row,
-  .weekly-actions {
+  .city-row-header,
+  .city-row-actions {
     display: flex;
     flex-direction: column;
   }
