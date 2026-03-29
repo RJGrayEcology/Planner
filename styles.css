@@ -526,7 +526,9 @@ label {
 }
 
 input[type="number"],
-input[type="file"] {
+input[type="file"],
+input[type="text"],
+textarea {
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(255,255,255,0.03);
@@ -557,6 +559,39 @@ select {
 .weight-row { display: grid; gap: 8px; }
 .weight-row input { accent-color: var(--accent); }
 .file-label { margin-top: 6px; }
+
+.rec-log-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rec-save {
+  width: fit-content;
+}
+
+.weekly-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.weekly-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.weekly-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 
 .note-card h4,
 .lane-card h4,
@@ -614,8 +649,11 @@ select {
   .topbar,
   .hero-header,
   .rec-top,
+  .rec-log-grid,
   .allocation-row,
-  .country-score-row {
+  .country-score-row,
+  .weekly-row,
+  .weekly-actions {
     display: flex;
     flex-direction: column;
   }

@@ -150,6 +150,19 @@ const DEFAULT_STATE = {
     { name: 'FMP market gainers API', type: 'API', status: 'live', note: 'Daily market momentum scan for investment radar.' },
     { name: 'Alternative.me sentiment API', type: 'API', status: 'live', note: 'Live fear & greed signal for risk pacing.' },
   ],
+  weeklyLoop: {
+    weekAnchorDate: null,
+    checkpoints: {
+      mondaySignalReview: { completedAt: null, note: '' },
+      midweekExecutionCheckpoint: { completedAt: null, note: '' },
+      fridayReflection: { completedAt: null, note: '' },
+      sundayPlanUpdate: { completedAt: null, note: '' },
+    },
+  },
+  actionLearning: {
+    logs: [],
+    stats: {},
+  },
   meta: { lastEngine: null, lastSavedAt: null },
 };
 
@@ -179,8 +192,19 @@ function hydrateState(parsed = {}) {
     threats: parsed.threats || clone(DEFAULT_STATE.threats),
     signals: { ...clone(DEFAULT_STATE.signals), ...(parsed.signals || {}) },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
+    weeklyLoop: { ...clone(DEFAULT_STATE.weeklyLoop), ...(parsed.weeklyLoop || {}) },
+    actionLearning: { ...clone(DEFAULT_STATE.actionLearning), ...(parsed.actionLearning || {}) },
     meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
   };
+
+  merged.weeklyLoop.checkpoints = {
+    ...clone(DEFAULT_STATE.weeklyLoop.checkpoints),
+    ...(parsed.weeklyLoop?.checkpoints || {}),
+  };
+  merged.actionLearning.logs = Array.isArray(parsed.actionLearning?.logs) ? parsed.actionLearning.logs : [];
+  merged.actionLearning.stats = parsed.actionLearning?.stats && typeof parsed.actionLearning.stats === 'object'
+    ? parsed.actionLearning.stats
+    : {};
 
   merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
   return merged;
@@ -340,6 +364,42 @@ function getRelevantJobs(stateRef) {
     .slice(0, 10);
 }
 
+function getWeekAnchorDate(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 Sun - 6 Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function ensureCurrentWeekLoop(stateRef) {
+  const currentAnchor = getWeekAnchorDate();
+  if (stateRef.weeklyLoop.weekAnchorDate === currentAnchor) return;
+  stateRef.weeklyLoop = {
+    weekAnchorDate: currentAnchor,
+    checkpoints: clone(DEFAULT_STATE.weeklyLoop.checkpoints),
+  };
+}
+
+function applyLearningToConfidence(stateRef, actionKey, baseScore) {
+  const stats = stateRef.actionLearning.stats[actionKey];
+  if (!stats || stats.total < 3) {
+    return { score: clamp(round(baseScore), 20, 95), label: baseScore >= 72 ? 'High' : baseScore >= 52 ? 'Medium' : 'Low' };
+  }
+
+  const completionRate = (stats.done || 0) / Math.max(stats.total, 1);
+  const deferRate = (stats.deferred || 0) / Math.max(stats.total, 1);
+  const skipRate = (stats.skipped || 0) / Math.max(stats.total, 1);
+  const outcomeBoost = clamp((stats.positiveOutcomeCount || 0) - (stats.negativeOutcomeCount || 0), -5, 5);
+  const adjustment = completionRate * 18 - deferRate * 10 - skipRate * 14 + outcomeBoost;
+  const learnedScore = clamp(round(baseScore + adjustment), 20, 95);
+  return {
+    score: learnedScore,
+    label: learnedScore >= 72 ? 'High' : learnedScore >= 52 ? 'Medium' : 'Low',
+  };
+}
+
 function generateBriefing(stateRef, engine) {
   const topOpps = clone(stateRef.opportunities)
     .sort((a, b) => (b.fit * 0.58 + b.upside * 0.42) - (a.fit * 0.58 + a.upside * 0.42));
@@ -360,17 +420,36 @@ function generateBriefing(stateRef, engine) {
 
   return {
     today: [
-      { title: 'Ship one high-value output in your strongest lane', meta: 'Income leverage | Expertise-first', description: `Prioritize ${topOpps[0].title.toLowerCase()} and complete one concrete output (proposal, brief, or targeted application).`, payoff: 'High leverage', risk: 'Low risk', time: '45-60 min', confidence: 'High' },
       {
+        actionKey: 'ship_high_value_output',
+        title: 'Ship one high-value output in your strongest lane',
+        meta: 'Income leverage | Expertise-first',
+        description: `Prioritize ${topOpps[0].title.toLowerCase()} and complete one concrete output (proposal, brief, or targeted application).`,
+        payoff: 'High leverage',
+        risk: 'Low risk',
+        time: '45-60 min',
+        baseConfidenceScore: 76,
+      },
+      {
+        actionKey: 'apply_or_outreach_live_role',
         title: liveJob ? `Apply or outreach to this live role: ${liveJob.title}` : 'No live role captured yet: run manual job scan now',
         meta: 'Career watch | Live feed',
         description: liveJob ? `${liveJob.detail}. Use this as your first concrete career action today.` : 'Trigger “Load live signals” and shortlist one role with clear fit before ending the day.',
         payoff: 'Career acceleration',
         risk: 'Low risk',
         time: '20-30 min',
-        confidence: liveJob ? 'High' : 'Medium',
+        baseConfidenceScore: liveJob ? 78 : 58,
       },
-      { title: weekendMode ? 'Weekend protection ON: run low-cognitive tasks only' : 'Weekend protection OFF: one medium push is allowed', meta: 'Energy protocol', description: weekendMode ? 'Burnout is elevated, so this engine is protecting recovery. Keep weekend execution to admin, maintenance, and setup tasks.' : 'Energy load is acceptable. Add one medium-effort strategic task, then hard-stop.', payoff: 'Burnout control', risk: 'Low risk', time: '20-40 min', confidence: 'High' },
+      {
+        actionKey: 'apply_weekend_energy_protocol',
+        title: weekendMode ? 'Weekend protection ON: run low-cognitive tasks only' : 'Weekend protection OFF: one medium push is allowed',
+        meta: 'Energy protocol',
+        description: weekendMode ? 'Burnout is elevated, so this engine is protecting recovery. Keep weekend execution to admin, maintenance, and setup tasks.' : 'Energy load is acceptable. Add one medium-effort strategic task, then hard-stop.',
+        payoff: 'Burnout control',
+        risk: 'Low risk',
+        time: '20-40 min',
+        baseConfidenceScore: 74,
+      },
     ],
     whyNow: [
       { title: 'Family runway pressure is real', detail: `Runway is ${round(engine.runway)} months. Child-related uncertainty makes liquidity timing critical.` },
@@ -420,6 +499,13 @@ function generateBriefing(stateRef, engine) {
   };
 }
 
+function annotateLearnedConfidence(stateRef, recommendations) {
+  return recommendations.map((rec) => {
+    const learned = applyLearningToConfidence(stateRef, rec.actionKey, rec.baseConfidenceScore || 60);
+    return { ...rec, confidence: `${learned.label} (${learned.score})`, confidenceScore: learned.score };
+  });
+}
+
 function getDirective(engine) {
   if (engine.weekendProtection < 45) {
     return {
@@ -452,7 +538,45 @@ function recommendationNode(rec) {
   node.querySelector('.rec-payoff').textContent = rec.payoff;
   node.querySelector('.rec-risk').textContent = rec.risk;
   node.querySelector('.rec-time').textContent = rec.time;
+  node.querySelector('.rec-status').value = '';
+  node.querySelector('.rec-reason').value = '';
+  node.querySelector('.rec-outcome').value = '';
+  const saveBtn = node.querySelector('.rec-save');
+  saveBtn.dataset.actionKey = rec.actionKey || '';
+  saveBtn.addEventListener('click', () => handleActionLog(saveBtn));
   return node;
+}
+
+function handleActionLog(buttonEl) {
+  const card = buttonEl.closest('.recommendation-card');
+  const status = card.querySelector('.rec-status').value;
+  const reasonCode = card.querySelector('.rec-reason').value;
+  const outcome = card.querySelector('.rec-outcome').value.trim();
+  const actionKey = buttonEl.dataset.actionKey;
+  if (!actionKey || !status || !reasonCode) return;
+
+  const log = {
+    actionKey,
+    status,
+    reasonCode,
+    outcome,
+    loggedAt: new Date().toISOString(),
+  };
+  state.actionLearning.logs.unshift(log);
+  state.actionLearning.logs = state.actionLearning.logs.slice(0, 300);
+
+  const stats = state.actionLearning.stats[actionKey] || {
+    total: 0, done: 0, skipped: 0, deferred: 0, positiveOutcomeCount: 0, negativeOutcomeCount: 0,
+  };
+  stats.total += 1;
+  stats[status] = (stats[status] || 0) + 1;
+  const lowerOutcome = outcome.toLowerCase();
+  if (/(improved|better|win|progress|closed|completed|success)/.test(lowerOutcome)) stats.positiveOutcomeCount += 1;
+  if (/(worse|blocked|missed|delay|failed|burnout|regress)/.test(lowerOutcome)) stats.negativeOutcomeCount += 1;
+  state.actionLearning.stats[actionKey] = stats;
+
+  saveState();
+  renderAll();
 }
 
 function noteCard(item, kicker = '') {
@@ -487,12 +611,52 @@ function renderOverview(engine, briefing, changeItems) {
   const degrees = Math.max(4, Math.round(engine.compositeScore * 3.6));
   E.compositeScoreRing.style.background = `conic-gradient(var(--accent) 0deg, var(--accent-2) ${degrees}deg, rgba(255,255,255,0.08) ${degrees}deg)`;
 
-  renderStack(E.todayActions, briefing.today, recommendationNode);
+  const todayWithConfidence = annotateLearnedConfidence(state, briefing.today);
+  renderStack(E.todayActions, todayWithConfidence, recommendationNode);
   renderStack(E.whyNow, briefing.whyNow, (item) => noteCard(item, 'Why now'));
   renderStack(E.whatChanged, changeItems, (item) => noteCard(item, 'Change'));
   renderStack(E.threatList, state.threats, (item) => noteCard({ title: item.title, detail: item.note }, item.severity));
   renderStack(E.opportunityLanes, briefing.topOpps.slice(0, 3), (item) => noteCard({ title: item.title, detail: item.why }, item.type));
   renderStack(E.checkpointList, briefing.checkpoints, (item) => noteCard(item, 'Checkpoint'));
+  renderWeeklyLoop();
+}
+
+function checkpointLabel(checkpoint) {
+  if (!checkpoint.completedAt) return 'Pending';
+  return `Done ${new Date(checkpoint.completedAt).toLocaleDateString()}`;
+}
+
+function renderWeeklyLoop() {
+  const checkpoints = state.weeklyLoop.checkpoints;
+  const rows = [
+    { key: 'mondaySignalReview', label: 'Monday signal review' },
+    { key: 'midweekExecutionCheckpoint', label: 'Midweek execution checkpoint' },
+    { key: 'fridayReflection', label: 'Friday reflection' },
+    { key: 'sundayPlanUpdate', label: 'Sunday plan update' },
+  ];
+  E.weeklyOpsLoop.innerHTML = rows.map((row) => `
+    <div class="weekly-row">
+      <div>
+        <p class="weekly-title">${row.label}</p>
+        <p class="muted small">${checkpointLabel(checkpoints[row.key])}</p>
+      </div>
+      <div class="weekly-actions">
+        <input type="text" class="weekly-note" data-key="${row.key}" placeholder="Notes (optional)" value="${checkpoints[row.key].note || ''}" />
+        <button class="btn btn-secondary weekly-complete" data-key="${row.key}">Mark done</button>
+      </div>
+    </div>
+  `).join('');
+
+  E.weeklyOpsLoop.querySelectorAll('.weekly-complete').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const noteInput = E.weeklyOpsLoop.querySelector(`.weekly-note[data-key="${key}"]`);
+      state.weeklyLoop.checkpoints[key].completedAt = new Date().toISOString();
+      state.weeklyLoop.checkpoints[key].note = noteInput?.value?.trim() || '';
+      saveState();
+      renderAll();
+    });
+  });
 }
 
 function renderHorizons(briefing) {
@@ -648,6 +812,7 @@ function renderSettings() {
 }
 
 function renderAll() {
+  ensureCurrentWeekLoop(state);
   const engine = computeEngine(state);
   const briefing = generateBriefing(state, engine);
   const changeItems = computeChanges(engine, state.meta.lastEngine);
@@ -881,6 +1046,7 @@ function cacheElements() {
     threatList: document.getElementById('threat-list'),
     opportunityLanes: document.getElementById('opportunity-lanes'),
     checkpointList: document.getElementById('checkpoint-list'),
+    weeklyOpsLoop: document.getElementById('weekly-ops-loop'),
 
     horizonTimeline: document.getElementById('horizon-timeline'),
     strategyNarrative: document.getElementById('strategy-narrative'),
