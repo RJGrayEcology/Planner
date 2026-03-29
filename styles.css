@@ -152,6 +152,47 @@ a { color: inherit; }
   justify-content: flex-end;
 }
 
+.trend-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trend-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.range-toggle {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.trend-range-btn.active {
+  background: linear-gradient(135deg, rgba(94, 234, 212, 0.22), rgba(96, 165, 250, 0.18));
+}
+
+.trend-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.chart-wrap {
+  height: 280px;
+}
+
+.chart-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .btn {
   border: 1px solid var(--border);
   border-radius: 14px;

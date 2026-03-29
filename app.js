@@ -113,6 +113,7 @@ const DEFAULT_STATE = {
     expectedReturnPct: 7,
     spouseIncomeTarget: 500,
     sideIncomeTarget: 1200,
+    applicationsTracked: 2,
   },
   weights: { wealth: 35, safety: 30, housing: 20, career: 10, energy: 5 },
   comparisonCountryIds: ['netherlands', 'canada'],
@@ -150,6 +151,7 @@ const DEFAULT_STATE = {
     { name: 'FMP market gainers API', type: 'API', status: 'live', note: 'Daily market momentum scan for investment radar.' },
     { name: 'Alternative.me sentiment API', type: 'API', status: 'live', note: 'Live fear & greed signal for risk pacing.' },
   ],
+  history: { daily: [] },
   meta: { lastEngine: null, lastSavedAt: null },
 };
 
@@ -160,6 +162,7 @@ const round = (v) => Math.round(v);
 const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
 const avg = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
 const euros = (value) => new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value);
+const isoDay = (date = new Date()) => date.toISOString().slice(0, 10);
 
 function buildCountries(stateRef) {
   const base = ['belgium', 'france', 'united-states'];
@@ -179,11 +182,12 @@ function hydrateState(parsed = {}) {
     threats: parsed.threats || clone(DEFAULT_STATE.threats),
     signals: { ...clone(DEFAULT_STATE.signals), ...(parsed.signals || {}) },
     connectors: parsed.connectors || clone(DEFAULT_STATE.connectors),
+    history: { ...clone(DEFAULT_STATE.history), ...(parsed.history || {}) },
     meta: { ...clone(DEFAULT_STATE.meta), ...(parsed.meta || {}) },
   };
 
   merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
-  if (!merged.signals.meta || typeof merged.signals.meta !== 'object') merged.signals.meta = {};
+  merged.history.daily = Array.isArray(parsed?.history?.daily) ? parsed.history.daily : [];
   return merged;
 }
 
@@ -261,6 +265,7 @@ function computeEngine(stateRef) {
   const spousePotential = clamp(round(avg(spouseIncomePaths.map((path) => path.fit)) * 0.82 + (profile.spouseIncomeTarget / 14)), 0, 100);
   const careerLeverageScore = clamp(round(avg(careerLanes.map((lane) => lane.fit)) * 0.75 + (profile.sideIncomeTarget / 18)), 0, 100);
   const opportunityScore = clamp(round(avg(opportunities.map((opp) => opp.fit * 0.58 + opp.upside * 0.42))), 0, 100);
+  const executionLoad = clamp(round((profile.weeklyHours / 55) * 70 + (profile.applicationsTracked || 0) * 4), 0, 100);
 
   const locationScores = countries.map((country) => computeCountryScores(country, normalizedWeights, profile)).sort((a, b) => b.total - a.total);
   const topCountry = locationScores[0];
@@ -288,11 +293,151 @@ function computeEngine(stateRef) {
     spousePotential,
     careerLeverageScore,
     opportunityScore,
+    executionLoad,
     locationScores,
     topCountry,
     familyScore,
     compositeScore,
   };
+}
+
+function upsertDailySnapshot(engine) {
+  const today = isoDay();
+  const relevantJobs = getRelevantJobs(state);
+  const snapshot = {
+    date: today,
+    wealthScore: engine.wealthScore,
+    resilienceScore: engine.resilienceScore,
+    familyScore: engine.familyScore,
+    weekendProtection: engine.weekendProtection,
+    savingsRate: round(engine.savingsRate),
+    topCountry: engine.topCountry.name,
+    feedCounts: {
+      weather: state.signals.weather ? 1 : 0,
+      hazards: state.signals.hazards.length,
+      tech: state.signals.tech.length,
+      jobs: state.signals.jobs.length,
+      investments: state.signals.investments.length,
+    },
+    runwayMonths: round(engine.runway * 10) / 10,
+    houseFundProjection: round(engine.houseProjection),
+    weekendBurnout: state.profile.weekendBurnout,
+    executionLoad: engine.executionLoad,
+    highFitJobsWeek: relevantJobs.length,
+    applicationsTracked: state.profile.applicationsTracked || 0,
+  };
+
+  const existingIndex = state.history.daily.findIndex((item) => item.date === today);
+  if (existingIndex >= 0) state.history.daily[existingIndex] = snapshot;
+  else state.history.daily.push(snapshot);
+
+  state.history.daily = state.history.daily
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-730);
+}
+
+function movingAverage(values, span = 7) {
+  return values.map((_, index) => {
+    const start = Math.max(0, index - span + 1);
+    const window = values.slice(start, index + 1);
+    return round(avg(window) * 10) / 10;
+  });
+}
+
+function makeChartConfig(labels, datasets, yAxes = {}) {
+  return {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#dbe3ee' } } },
+      scales: {
+        x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(148, 163, 184, 0.12)' } },
+        y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(148, 163, 184, 0.12)' }, min: 0, max: 100 },
+        ...yAxes,
+      },
+    },
+  };
+}
+
+function drawOrUpdateChart(key, canvas, config) {
+  if (E.trendCharts[key]) E.trendCharts[key].destroy();
+  E.trendCharts[key] = new Chart(canvas, config);
+}
+
+function renderTrends() {
+  if (typeof Chart === 'undefined') return;
+
+  const days = Number(state.meta.trendRangeDays || 30);
+  const showMovingAverage = Boolean(state.meta.showMovingAverage ?? true);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const cutoffText = isoDay(cutoff);
+  const history = state.history.daily.filter((item) => item.date >= cutoffText);
+  if (!history.length) return;
+
+  const labels = history.map((item) => item.date.slice(5));
+  const wealth = history.map((item) => item.wealthScore);
+  const resilience = history.map((item) => item.resilienceScore);
+  const family = history.map((item) => item.familyScore);
+  const weekend = history.map((item) => item.weekendProtection);
+  const runway = history.map((item) => item.runwayMonths || 0);
+  const houseFund = history.map((item) => item.houseFundProjection || 0);
+  const burnout = history.map((item) => item.weekendBurnout || 0);
+  const executionLoad = history.map((item) => item.executionLoad || 0);
+  const highFitJobs = history.map((item) => item.highFitJobsWeek || 0);
+  const applications = history.map((item) => item.applicationsTracked || 0);
+
+  const maStyle = { borderDash: [6, 4], pointRadius: 0, tension: 0.3 };
+  const scoreDatasets = [
+    { label: 'Wealth', data: wealth, borderColor: '#5eead4', tension: 0.28 },
+    { label: 'Resilience', data: resilience, borderColor: '#60a5fa', tension: 0.28 },
+    { label: 'Family', data: family, borderColor: '#fbbf24', tension: 0.28 },
+    { label: 'Weekend protection', data: weekend, borderColor: '#fb7185', tension: 0.28 },
+  ];
+  if (showMovingAverage) {
+    scoreDatasets.push(
+      { label: 'Wealth (MA7)', data: movingAverage(wealth), borderColor: '#2dd4bf', ...maStyle },
+      { label: 'Resilience (MA7)', data: movingAverage(resilience), borderColor: '#3b82f6', ...maStyle },
+      { label: 'Family (MA7)', data: movingAverage(family), borderColor: '#f59e0b', ...maStyle },
+    );
+  }
+  drawOrUpdateChart('scoreTrends', E.scoreTrendsChart, makeChartConfig(labels, scoreDatasets));
+
+  const runwayHouseDatasets = [
+    { label: 'Runway (months)', data: runway, borderColor: '#a78bfa', yAxisID: 'y' },
+    { label: 'House fund projection (€)', data: houseFund, borderColor: '#34d399', yAxisID: 'y2' },
+  ];
+  if (showMovingAverage) runwayHouseDatasets.push({ label: 'Runway MA7', data: movingAverage(runway), borderColor: '#8b5cf6', yAxisID: 'y', ...maStyle });
+  drawOrUpdateChart('runwayHouse', E.runwayHouseChart, makeChartConfig(labels, runwayHouseDatasets, {
+    y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(148, 163, 184, 0.12)' }, min: 0 },
+    y2: {
+      position: 'right',
+      ticks: {
+        color: '#9ca3af',
+        callback: (value) => euros(value),
+      },
+      grid: { drawOnChartArea: false },
+    },
+  }));
+
+  const burnoutLoadDatasets = [
+    { label: 'Weekend burnout', data: burnout, borderColor: '#fb7185' },
+    { label: 'Execution load', data: executionLoad, borderColor: '#60a5fa' },
+  ];
+  if (showMovingAverage) burnoutLoadDatasets.push({ label: 'Execution load MA7', data: movingAverage(executionLoad), borderColor: '#2563eb', ...maStyle });
+  drawOrUpdateChart('burnoutLoad', E.burnoutLoadChart, makeChartConfig(labels, burnoutLoadDatasets));
+
+  const jobsAppsDatasets = [
+    { label: 'High-fit jobs / week', data: highFitJobs, borderColor: '#4ade80', yAxisID: 'y' },
+    { label: 'Applications tracked', data: applications, borderColor: '#f59e0b', yAxisID: 'y' },
+  ];
+  if (showMovingAverage) jobsAppsDatasets.push({ label: 'Jobs MA7', data: movingAverage(highFitJobs), borderColor: '#16a34a', yAxisID: 'y', ...maStyle });
+  drawOrUpdateChart('jobsApps', E.jobsApplicationsChart, makeChartConfig(labels, jobsAppsDatasets, {
+    y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(148, 163, 184, 0.12)' }, min: 0 },
+  }));
 }
 
 function computeChanges(currentEngine, previousEngine) {
@@ -784,10 +929,14 @@ function renderSettings() {
   });
 
   E.persistenceStamp.textContent = state.meta.lastSavedAt ? `Last saved: ${new Date(state.meta.lastSavedAt).toLocaleString()}` : 'No local save timestamp yet.';
+  const activeRange = Number(state.meta.trendRangeDays || 30);
+  E.trendRangeButtons.forEach((button) => button.classList.toggle('active', Number(button.dataset.range) === activeRange));
+  E.trendMAToggle.checked = Boolean(state.meta.showMovingAverage ?? true);
 }
 
 function renderAll() {
   const engine = computeEngine(state);
+  upsertDailySnapshot(engine);
   const briefing = generateBriefing(state, engine);
   const changeItems = computeChanges(engine, state.meta.lastEngine);
 
@@ -798,6 +947,7 @@ function renderAll() {
   renderCareer();
   renderFamily(engine, briefing);
   renderOpportunityRadar(briefing, engine);
+  renderTrends();
   renderSignals();
   renderSettings();
 
@@ -872,6 +1022,24 @@ function setupForms() {
 function setupActions() {
   E.refreshBriefing.addEventListener('click', () => renderAll());
   E.loadLiveSignals.addEventListener('click', refreshFeeds);
+}
+
+function setupTrendControls() {
+  E.trendRangeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      E.trendRangeButtons.forEach((node) => node.classList.remove('active'));
+      button.classList.add('active');
+      state.meta.trendRangeDays = Number(button.dataset.range);
+      saveState();
+      renderTrends();
+    });
+  });
+
+  E.trendMAToggle.addEventListener('change', () => {
+    state.meta.showMovingAverage = E.trendMAToggle.checked;
+    saveState();
+    renderTrends();
+  });
 }
 
 function weatherCodeToText(code) {
@@ -1197,6 +1365,13 @@ function cacheElements() {
     comparisonCountry1: document.getElementById('comparison-country-1'),
     comparisonCountry2: document.getElementById('comparison-country-2'),
     persistenceStamp: document.getElementById('persistence-stamp'),
+    scoreTrendsChart: document.getElementById('score-trends-chart'),
+    runwayHouseChart: document.getElementById('runway-house-chart'),
+    burnoutLoadChart: document.getElementById('burnout-load-chart'),
+    jobsApplicationsChart: document.getElementById('jobs-applications-chart'),
+    trendRangeButtons: document.querySelectorAll('.trend-range-btn'),
+    trendMAToggle: document.getElementById('trend-ma-toggle'),
+    trendCharts: {},
   });
 }
 
@@ -1205,6 +1380,7 @@ function init() {
   setupNavigation();
   setupForms();
   setupActions();
+  setupTrendControls();
   setupDailyAutomation();
   renderAll();
 }
