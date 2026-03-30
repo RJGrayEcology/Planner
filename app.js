@@ -167,6 +167,7 @@ const DEFAULT_STATE = {
     jobs: [],
     investments: [],
     lastUpdated: null,
+    meta: {},
     panelData: {
       career: { sources: [], parseFailures: 0, parseQuality: 0 },
       investment: { sources: [], parseFailures: 0, parseQuality: 0 },
@@ -220,6 +221,32 @@ const DEFAULT_STATE = {
         childcareProxy: 73,
         commuteAirportNotes: 'Strong train links and airport access. Commute quality depends on arrondissement.',
       },
+    ],
+  },
+  weeklyLoop: {
+    weekAnchorDate: null,
+    checkpoints: {
+      incomePriority: false,
+      liveRoleAction: false,
+      weekendProtection: false,
+    },
+  },
+  actionLearning: {
+    logs: [],
+    stats: {},
+  },
+  history: {
+    daily: [],
+  },
+  portfolioPolicy: {
+    emergencyFloorMonths: 6,
+    runwayTargetMonths: 12,
+    houseFundProtectionThreshold: 0.5,
+    maxRiskAllocationUnderRunwayTarget: 0.2,
+    monthlyInvestableBands: [
+      { max: 400, riskAllocation: 0.1, label: 'Conservative' },
+      { max: 900, riskAllocation: 0.2, label: 'Balanced' },
+      { max: null, riskAllocation: 0.3, label: 'Growth' },
     ],
   },
   meta: { lastEngine: null, lastSavedAt: null },
@@ -286,19 +313,34 @@ function hydrateState(parsed = {}) {
       assumptions: { ...clone(DEFAULT_STATE.scenarioLab.assumptions), ...(parsed.scenarioLab?.assumptions || {}) },
       saved: Array.isArray(parsed.scenarioLab?.saved) ? parsed.scenarioLab.saved : clone(DEFAULT_STATE.scenarioLab.saved),
     },
+    weeklyLoop: { ...clone(DEFAULT_STATE.weeklyLoop), ...(parsed.weeklyLoop || {}) },
+    actionLearning: {
+      ...clone(DEFAULT_STATE.actionLearning),
+      ...(parsed.actionLearning || {}),
+      logs: Array.isArray(parsed.actionLearning?.logs) ? parsed.actionLearning.logs : [],
+      stats: parsed.actionLearning?.stats && typeof parsed.actionLearning.stats === 'object'
+        ? parsed.actionLearning.stats
+        : {},
+    },
+    history: {
+      ...clone(DEFAULT_STATE.history),
+      ...(parsed.history || {}),
+      daily: Array.isArray(parsed?.history?.daily) ? parsed.history.daily : [],
+    },
+    portfolioPolicy: {
+      ...clone(DEFAULT_STATE.portfolioPolicy),
+      ...(parsed.portfolioPolicy || {}),
+      monthlyInvestableBands: Array.isArray(parsed.portfolioPolicy?.monthlyInvestableBands)
+        ? parsed.portfolioPolicy.monthlyInvestableBands
+        : clone(DEFAULT_STATE.portfolioPolicy.monthlyInvestableBands),
+    },
   };
 
+  merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
   merged.weeklyLoop.checkpoints = {
     ...clone(DEFAULT_STATE.weeklyLoop.checkpoints),
     ...(parsed.weeklyLoop?.checkpoints || {}),
   };
-  merged.actionLearning.logs = Array.isArray(parsed.actionLearning?.logs) ? parsed.actionLearning.logs : [];
-  merged.actionLearning.stats = parsed.actionLearning?.stats && typeof parsed.actionLearning.stats === 'object'
-    ? parsed.actionLearning.stats
-    : {};
-
-  merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
-  merged.history.daily = Array.isArray(parsed?.history?.daily) ? parsed.history.daily : [];
   return merged;
 }
 
@@ -836,17 +878,28 @@ function getDirective(engine) {
 function recommendationNode(rec) {
   const template = document.getElementById('recommendation-template');
   const node = template.content.cloneNode(true);
-  node.querySelector('.rec-title').textContent = rec.title;
-  node.querySelector('.rec-action').textContent = rec.action;
-  node.querySelector('.rec-impact').textContent = rec.expectedImpact;
-  node.querySelector('.rec-urgency').textContent = rec.urgency;
-  node.querySelector('.confidence-pill').textContent = rec.confidence;
-  node.querySelector('.rec-payoff').textContent = rec.payoff;
-  node.querySelector('.rec-risk').textContent = rec.risk;
-  node.querySelector('.rec-time').textContent = rec.time;
-  node.querySelector('.rec-status').value = '';
-  node.querySelector('.rec-reason').value = '';
-  node.querySelector('.rec-outcome').value = '';
+  const setText = (selector, value) => {
+    const target = node.querySelector(selector);
+    if (target) target.textContent = value ?? '';
+  };
+  const setValue = (selector, value) => {
+    const target = node.querySelector(selector);
+    if (target) target.value = value ?? '';
+  };
+  setText('.rec-title', rec.title);
+  setText('.rec-action', rec.meta || rec.action || '');
+  setText('.rec-impact', rec.description || rec.expectedImpact || '');
+  setText('.rec-urgency', rec.urgency || 'today');
+  setText('.confidence-pill', rec.confidence || '');
+  setText('.rec-payoff', rec.payoff || '');
+  setText('.rec-risk', rec.risk || '');
+  setText('.rec-time', rec.time || '');
+  setText('.rec-what-changed', rec.whatChanged || 'Tracked from latest score and signal shifts.');
+  setText('.rec-why-now', rec.whyNow || 'Prioritized by current constraints, opportunity quality, and family bandwidth.');
+  setText('.rec-review', rec.reviewCadence || 'Re-evaluate in 24 hours.');
+  setValue('.rec-status', '');
+  setValue('.rec-reason', '');
+  setValue('.rec-outcome', '');
   const saveBtn = node.querySelector('.rec-save');
   saveBtn.dataset.actionKey = rec.actionKey || '';
   saveBtn.addEventListener('click', () => handleActionLog(saveBtn));
@@ -1725,6 +1778,11 @@ async function loadLiveSignals() {
 
 const FEED_TIMEOUT_MS = 12000;
 
+function chooseCategoryPayload(category, payload) {
+  if (category === 'weather') return payload || null;
+  return Array.isArray(payload) ? payload : [];
+}
+
 const feedRegistry = [
   {
     id: 'weather-open-meteo',
@@ -1842,6 +1900,7 @@ const feedRegistry = [
     fallbackSources: ['markets-fmp-gainers'],
   },
 ];
+const registryById = Object.fromEntries(feedRegistry.map((feed) => [feed.id, feed]));
 
 function shortError(error) {
   return (error?.message || 'Unknown error').slice(0, 120);
@@ -1870,6 +1929,7 @@ async function refreshFeeds() {
   const original = E.loadLiveSignals.textContent;
   E.loadLiveSignals.textContent = 'Loading...';
   E.loadLiveSignals.disabled = true;
+  const nowIso = new Date().toISOString();
 
   try {
     const panelSources = {
