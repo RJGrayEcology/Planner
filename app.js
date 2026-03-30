@@ -167,6 +167,7 @@ const DEFAULT_STATE = {
     jobs: [],
     investments: [],
     lastUpdated: null,
+    meta: {},
     panelData: {
       career: { sources: [], parseFailures: 0, parseQuality: 0 },
       investment: { sources: [], parseFailures: 0, parseQuality: 0 },
@@ -222,6 +223,32 @@ const DEFAULT_STATE = {
       },
     ],
   },
+  weeklyLoop: {
+    weekAnchorDate: null,
+    checkpoints: {
+      incomePriority: false,
+      liveRoleAction: false,
+      weekendProtection: false,
+    },
+  },
+  actionLearning: {
+    logs: [],
+    stats: {},
+  },
+  history: {
+    daily: [],
+  },
+  portfolioPolicy: {
+    emergencyFloorMonths: 6,
+    runwayTargetMonths: 12,
+    houseFundProtectionThreshold: 0.5,
+    maxRiskAllocationUnderRunwayTarget: 0.2,
+    monthlyInvestableBands: [
+      { max: 400, riskAllocation: 0.1, label: 'Conservative' },
+      { max: 900, riskAllocation: 0.2, label: 'Balanced' },
+      { max: null, riskAllocation: 0.3, label: 'Growth' },
+    ],
+  },
   meta: { lastEngine: null, lastSavedAt: null },
   scenarioLab: {
     assumptions: {
@@ -243,6 +270,10 @@ const round = (v) => Math.round(v);
 const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
 const avg = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
 const euros = (value) => new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value);
+const isoDay = (date = new Date()) => {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const escapeHTML = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -286,19 +317,34 @@ function hydrateState(parsed = {}) {
       assumptions: { ...clone(DEFAULT_STATE.scenarioLab.assumptions), ...(parsed.scenarioLab?.assumptions || {}) },
       saved: Array.isArray(parsed.scenarioLab?.saved) ? parsed.scenarioLab.saved : clone(DEFAULT_STATE.scenarioLab.saved),
     },
+    weeklyLoop: { ...clone(DEFAULT_STATE.weeklyLoop), ...(parsed.weeklyLoop || {}) },
+    actionLearning: {
+      ...clone(DEFAULT_STATE.actionLearning),
+      ...(parsed.actionLearning || {}),
+      logs: Array.isArray(parsed.actionLearning?.logs) ? parsed.actionLearning.logs : [],
+      stats: parsed.actionLearning?.stats && typeof parsed.actionLearning.stats === 'object'
+        ? parsed.actionLearning.stats
+        : {},
+    },
+    history: {
+      ...clone(DEFAULT_STATE.history),
+      ...(parsed.history || {}),
+      daily: Array.isArray(parsed?.history?.daily) ? parsed.history.daily : [],
+    },
+    portfolioPolicy: {
+      ...clone(DEFAULT_STATE.portfolioPolicy),
+      ...(parsed.portfolioPolicy || {}),
+      monthlyInvestableBands: Array.isArray(parsed.portfolioPolicy?.monthlyInvestableBands)
+        ? parsed.portfolioPolicy.monthlyInvestableBands
+        : clone(DEFAULT_STATE.portfolioPolicy.monthlyInvestableBands),
+    },
   };
 
+  merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
   merged.weeklyLoop.checkpoints = {
     ...clone(DEFAULT_STATE.weeklyLoop.checkpoints),
     ...(parsed.weeklyLoop?.checkpoints || {}),
   };
-  merged.actionLearning.logs = Array.isArray(parsed.actionLearning?.logs) ? parsed.actionLearning.logs : [];
-  merged.actionLearning.stats = parsed.actionLearning?.stats && typeof parsed.actionLearning.stats === 'object'
-    ? parsed.actionLearning.stats
-    : {};
-
-  merged.comparisonCountryIds = Array.isArray(parsed.comparisonCountryIds) ? parsed.comparisonCountryIds : clone(DEFAULT_STATE.comparisonCountryIds);
-  merged.history.daily = Array.isArray(parsed?.history?.daily) ? parsed.history.daily : [];
   return merged;
 }
 
@@ -674,6 +720,55 @@ function applyLearningToConfidence(stateRef, actionKey, baseScore) {
   };
 }
 
+function classifyMarketFeedToActionClasses(investmentFeed = [], policySnapshot = {}) {
+  if (!Array.isArray(investmentFeed) || !investmentFeed.length) {
+    return [{ title: 'No live market signal yet', detail: 'Load live signals to classify current market conditions and map actions.' }];
+  }
+  const riskCapPct = round((policySnapshot.effectiveRiskAllocationCap || 0) * 100);
+  return investmentFeed.slice(0, 3).map((item) => {
+    const title = item?.title || 'Market signal';
+    const isGreed = /greed/i.test(title);
+    const isFear = /fear/i.test(title);
+    const posture = isGreed ? 'Reduce risk pace' : isFear ? 'Accumulate gradually' : 'Stay selective';
+    return {
+      title: `${title} → ${posture}`,
+      detail: `Policy cap for risk allocation is ${riskCapPct}%. ${item?.detail || 'Use this as a pacing input, not a single-source decision.'}`,
+    };
+  });
+}
+
+function buildConstraintFirstRecommendations(policySnapshot = {}, marketActions = [], liveInvestment = null) {
+  const recs = [];
+  if (policySnapshot.isRunwayBelowEmergencyFloor) {
+    recs.push({
+      title: 'Pause risk adds and rebuild emergency runway',
+      detail: 'Runway is below your emergency floor. Redirect surplus to liquidity before adding risk exposure.',
+    });
+  }
+  if (policySnapshot.isHouseFundUnderProtection) {
+    recs.push({
+      title: 'Prioritize house-fund protection contributions',
+      detail: 'House-fund coverage is below the protection threshold. Keep monthly transfers automatic until coverage improves.',
+    });
+  }
+  if (liveInvestment) {
+    recs.push({
+      title: `Review today’s top market signal: ${liveInvestment.title}`,
+      detail: liveInvestment.detail || 'Use this feed as context and apply your policy constraints before acting.',
+    });
+  }
+  if (Array.isArray(marketActions) && marketActions.length) {
+    recs.push({
+      title: 'Apply action-class pacing',
+      detail: marketActions[0].detail,
+    });
+  }
+  return recs.length ? recs : [{
+    title: 'Hold balanced deployment',
+    detail: 'No hard constraints triggered today. Continue disciplined, rules-based monthly allocation.',
+  }];
+}
+
 function generateBriefing(stateRef, engine) {
   const topOpps = clone(stateRef.opportunities)
     .sort((a, b) => (b.fit * 0.58 + b.upside * 0.42) - (a.fit * 0.58 + a.upside * 0.42));
@@ -836,17 +931,28 @@ function getDirective(engine) {
 function recommendationNode(rec) {
   const template = document.getElementById('recommendation-template');
   const node = template.content.cloneNode(true);
-  node.querySelector('.rec-title').textContent = rec.title;
-  node.querySelector('.rec-action').textContent = rec.action;
-  node.querySelector('.rec-impact').textContent = rec.expectedImpact;
-  node.querySelector('.rec-urgency').textContent = rec.urgency;
-  node.querySelector('.confidence-pill').textContent = rec.confidence;
-  node.querySelector('.rec-payoff').textContent = rec.payoff;
-  node.querySelector('.rec-risk').textContent = rec.risk;
-  node.querySelector('.rec-time').textContent = rec.time;
-  node.querySelector('.rec-status').value = '';
-  node.querySelector('.rec-reason').value = '';
-  node.querySelector('.rec-outcome').value = '';
+  const setText = (selector, value) => {
+    const target = node.querySelector(selector);
+    if (target) target.textContent = value ?? '';
+  };
+  const setValue = (selector, value) => {
+    const target = node.querySelector(selector);
+    if (target) target.value = value ?? '';
+  };
+  setText('.rec-title', rec.title);
+  setText('.rec-action', rec.meta || rec.action || '');
+  setText('.rec-impact', rec.description || rec.expectedImpact || '');
+  setText('.rec-urgency', rec.urgency || 'today');
+  setText('.confidence-pill', rec.confidence || '');
+  setText('.rec-payoff', rec.payoff || '');
+  setText('.rec-risk', rec.risk || '');
+  setText('.rec-time', rec.time || '');
+  setText('.rec-what-changed', rec.whatChanged || 'Tracked from latest score and signal shifts.');
+  setText('.rec-why-now', rec.whyNow || 'Prioritized by current constraints, opportunity quality, and family bandwidth.');
+  setText('.rec-review', rec.reviewCadence || 'Re-evaluate in 24 hours.');
+  setValue('.rec-status', '');
+  setValue('.rec-reason', '');
+  setValue('.rec-outcome', '');
   const saveBtn = node.querySelector('.rec-save');
   saveBtn.dataset.actionKey = rec.actionKey || '';
   saveBtn.addEventListener('click', () => handleActionLog(saveBtn));
@@ -1725,6 +1831,11 @@ async function loadLiveSignals() {
 
 const FEED_TIMEOUT_MS = 12000;
 
+function chooseCategoryPayload(category, payload) {
+  if (category === 'weather') return payload || null;
+  return Array.isArray(payload) ? payload : [];
+}
+
 const feedRegistry = [
   {
     id: 'weather-open-meteo',
@@ -1842,6 +1953,7 @@ const feedRegistry = [
     fallbackSources: ['markets-fmp-gainers'],
   },
 ];
+const registryById = Object.fromEntries(feedRegistry.map((feed) => [feed.id, feed]));
 
 function shortError(error) {
   return (error?.message || 'Unknown error').slice(0, 120);
@@ -1870,6 +1982,7 @@ async function refreshFeeds() {
   const original = E.loadLiveSignals.textContent;
   E.loadLiveSignals.textContent = 'Loading...';
   E.loadLiveSignals.disabled = true;
+  const nowIso = new Date().toISOString();
 
   try {
     const panelSources = {
@@ -2141,7 +2254,37 @@ function cacheElements() {
     saveScenario: document.getElementById('save-scenario'),
     scenarioOutcomeCards: document.getElementById('scenario-outcome-cards'),
     scenarioComparison: document.getElementById('scenario-comparison'),
+    trendRangeButtons: Array.from(document.querySelectorAll('[data-range]')),
+    trendMAToggle: document.getElementById('trend-ma-toggle'),
+    scoreTrendsChart: document.getElementById('score-trends-chart'),
+    runwayHouseChart: document.getElementById('runway-house-chart'),
+    burnoutLoadChart: document.getElementById('burnout-load-chart'),
+    jobsApplicationsChart: document.getElementById('jobs-applications-chart'),
+    trendCharts: {},
   });
+}
+
+function setupTrendControls() {
+  if (!Array.isArray(E.trendRangeButtons)) E.trendRangeButtons = [];
+  if (!E.trendCharts) E.trendCharts = {};
+  if (typeof state.meta.trendRangeDays !== 'number') state.meta.trendRangeDays = 30;
+  if (typeof state.meta.showMovingAverage !== 'boolean') state.meta.showMovingAverage = true;
+
+  E.trendRangeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      state.meta.trendRangeDays = Number(button.dataset.range) || 30;
+      saveState();
+      renderAll();
+    });
+  });
+
+  if (E.trendMAToggle) {
+    E.trendMAToggle.addEventListener('change', (event) => {
+      state.meta.showMovingAverage = Boolean(event.target.checked);
+      saveState();
+      renderAll();
+    });
+  }
 }
 
 function init() {
