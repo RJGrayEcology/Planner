@@ -2141,7 +2141,37 @@ function cacheElements() {
     saveScenario: document.getElementById('save-scenario'),
     scenarioOutcomeCards: document.getElementById('scenario-outcome-cards'),
     scenarioComparison: document.getElementById('scenario-comparison'),
+    trendRangeButtons: Array.from(document.querySelectorAll('[data-range]')),
+    trendMAToggle: document.getElementById('trend-ma-toggle'),
+    scoreTrendsChart: document.getElementById('score-trends-chart'),
+    runwayHouseChart: document.getElementById('runway-house-chart'),
+    burnoutLoadChart: document.getElementById('burnout-load-chart'),
+    jobsApplicationsChart: document.getElementById('jobs-applications-chart'),
+    trendCharts: {},
   });
+}
+
+function setupTrendControls() {
+  if (!Array.isArray(E.trendRangeButtons)) E.trendRangeButtons = [];
+  if (!E.trendCharts) E.trendCharts = {};
+  if (typeof state.meta.trendRangeDays !== 'number') state.meta.trendRangeDays = 30;
+  if (typeof state.meta.showMovingAverage !== 'boolean') state.meta.showMovingAverage = true;
+
+  E.trendRangeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      state.meta.trendRangeDays = Number(button.dataset.range) || 30;
+      saveState();
+      renderAll();
+    });
+  });
+
+  if (E.trendMAToggle) {
+    E.trendMAToggle.addEventListener('change', (event) => {
+      state.meta.showMovingAverage = Boolean(event.target.checked);
+      saveState();
+      renderAll();
+    });
+  }
 }
 
 function init() {
