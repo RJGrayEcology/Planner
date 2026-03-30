@@ -270,6 +270,10 @@ const round = (v) => Math.round(v);
 const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
 const avg = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
 const euros = (value) => new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value);
+const isoDay = (date = new Date()) => {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const escapeHTML = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -714,6 +718,55 @@ function applyLearningToConfidence(stateRef, actionKey, baseScore) {
     score: learnedScore,
     label: learnedScore >= 72 ? 'High' : learnedScore >= 52 ? 'Medium' : 'Low',
   };
+}
+
+function classifyMarketFeedToActionClasses(investmentFeed = [], policySnapshot = {}) {
+  if (!Array.isArray(investmentFeed) || !investmentFeed.length) {
+    return [{ title: 'No live market signal yet', detail: 'Load live signals to classify current market conditions and map actions.' }];
+  }
+  const riskCapPct = round((policySnapshot.effectiveRiskAllocationCap || 0) * 100);
+  return investmentFeed.slice(0, 3).map((item) => {
+    const title = item?.title || 'Market signal';
+    const isGreed = /greed/i.test(title);
+    const isFear = /fear/i.test(title);
+    const posture = isGreed ? 'Reduce risk pace' : isFear ? 'Accumulate gradually' : 'Stay selective';
+    return {
+      title: `${title} → ${posture}`,
+      detail: `Policy cap for risk allocation is ${riskCapPct}%. ${item?.detail || 'Use this as a pacing input, not a single-source decision.'}`,
+    };
+  });
+}
+
+function buildConstraintFirstRecommendations(policySnapshot = {}, marketActions = [], liveInvestment = null) {
+  const recs = [];
+  if (policySnapshot.isRunwayBelowEmergencyFloor) {
+    recs.push({
+      title: 'Pause risk adds and rebuild emergency runway',
+      detail: 'Runway is below your emergency floor. Redirect surplus to liquidity before adding risk exposure.',
+    });
+  }
+  if (policySnapshot.isHouseFundUnderProtection) {
+    recs.push({
+      title: 'Prioritize house-fund protection contributions',
+      detail: 'House-fund coverage is below the protection threshold. Keep monthly transfers automatic until coverage improves.',
+    });
+  }
+  if (liveInvestment) {
+    recs.push({
+      title: `Review today’s top market signal: ${liveInvestment.title}`,
+      detail: liveInvestment.detail || 'Use this feed as context and apply your policy constraints before acting.',
+    });
+  }
+  if (Array.isArray(marketActions) && marketActions.length) {
+    recs.push({
+      title: 'Apply action-class pacing',
+      detail: marketActions[0].detail,
+    });
+  }
+  return recs.length ? recs : [{
+    title: 'Hold balanced deployment',
+    detail: 'No hard constraints triggered today. Continue disciplined, rules-based monthly allocation.',
+  }];
 }
 
 function generateBriefing(stateRef, engine) {
